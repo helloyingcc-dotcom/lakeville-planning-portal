@@ -1,0 +1,112 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lakeville Events App — illustrative concept</title><style>body{margin:0;padding:18px;background:#f6f8f6}#lakeville-concept .mark{font-weight:600;font-size:22px}</style></head><body><div id="lakeville-concept">
+  <div class="concept-note">EARLY CONCEPT · All events, dates and counts below are illustrative</div>
+  <div class="app">
+    <header class="app-head">
+      <div class="identity"><span class="mark" aria-hidden="true">L</span><div><strong>Lakeville PTA</strong><span class="sub">A little closer, together.</span></div></div>
+      <label class="preview-label">Preview as<select id="lv-role"><option value="parent">Parent / guardian</option><option value="admin">PTA administrator</option></select></label>
+    </header>
+    <nav aria-label="App tabs" class="app-tabs">
+      <button type="button" data-tab="events" aria-pressed="true">Events</button>
+      <button type="button" data-tab="volunteers" aria-pressed="false">Volunteers</button>
+      <button type="button" data-tab="signups" aria-pressed="false">My Sign-ups</button>
+      <button type="button" data-tab="admin" aria-pressed="false" hidden>PTA Admin</button>
+    </nav>
+    <main id="lv-content"></main>
+    <footer><span>Lakeville PTA Events</span><span>Concept preview · No real registrations or payments</span></footer>
+  </div>
+</div>
+<style>
+#lakeville-concept{--paper:light-dark(#ffffff,#1b2429);--page:light-dark(#f6f8f6,#141c20);--text:light-dark(#213e38,#e7f0eb);--soft:light-dark(#60736b,#afc3b8);--line:light-dark(#dce5de,#35483f);--green:light-dark(#245c46,#9dd8b8);--on-green:light-dark(#ffffff,#11281d);--pale:light-dark(#eaf2eb,#273e31);--warm:light-dark(#f4e8d1,#493d27);font-family:Arial,sans-serif;font-size:14px;color:var(--text);color-scheme:light dark}
+#lakeville-concept *{box-sizing:border-box}
+#lakeville-concept [hidden]{display:none!important}
+#lakeville-concept .concept-note{color:var(--soft);font-size:12px;letter-spacing:.06em;margin-bottom:12px;padding-right:95px}
+#lakeville-concept .app{background:var(--paper);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+#lakeville-concept .app-head{padding:24px 28px;display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+#lakeville-concept .identity{display:flex;gap:12px;align-items:center}
+#lakeville-concept .mark{width:44px;height:44px;display:grid;place-items:center;background:var(--green);color:var(--on-green);border-radius:13px}
+#lakeville-concept strong{font-weight:600}
+#lakeville-concept .identity strong{font-size:21px;letter-spacing:-.5px}
+#lakeville-concept .sub{display:block;color:var(--soft);font-size:12px;margin-top:4px}
+#lakeville-concept .preview-label{display:flex;gap:10px;align-items:center;color:var(--soft);font-size:12px;flex-wrap:wrap}
+#lakeville-concept select,#lakeville-concept input{background:var(--paper);color:var(--text);padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;max-width:100%}
+#lakeville-concept button{font:inherit;cursor:pointer}
+#lakeville-concept .app-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:0 28px 14px;border-bottom:1px solid var(--line)}
+#lakeville-concept .app-tabs button{background:transparent;border:0;border-radius:8px;padding:11px 14px;display:flex;align-items:center;gap:8px;color:var(--soft)}
+#lakeville-concept .app-tabs button[aria-pressed=true]{background:var(--pale);color:var(--green);font-weight:600}
+#lakeville-concept svg{width:18px;height:18px}
+#lakeville-concept main{background:var(--page);padding:28px;min-height:440px}
+#lakeville-concept h2{font-size:26px;font-weight:600;letter-spacing:-.7px;margin:0 0 8px}
+#lakeville-concept h3{font-size:17px;font-weight:600;margin:0 0 9px}
+#lakeville-concept p{margin:0;line-height:1.6}
+#lakeville-concept .muted{color:var(--soft)}
+#lakeville-concept .intro{display:flex;justify-content:space-between;gap:14px;align-items:start;flex-wrap:wrap;margin-bottom:24px}
+#lakeville-concept .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+#lakeville-concept .event-card{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+#lakeville-concept .event-art{min-height:108px;background:var(--pale);display:flex;align-items:center;justify-content:space-between;padding:20px;color:var(--green)}
+#lakeville-concept .event-art svg{height:38px;width:38px;opacity:.65}
+#lakeville-concept .date{font-size:28px;letter-spacing:-1px}
+#lakeville-concept .date span{display:block;font-size:11px;letter-spacing:.1em;margin-bottom:5px}
+#lakeville-concept .card-body{padding:18px;display:flex;flex-direction:column;gap:12px;flex:1}
+#lakeville-concept .tag{font-size:11px;border-radius:5px;background:var(--pale);padding:4px 7px;color:var(--green);width:fit-content}
+#lakeville-concept .action{border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--text);padding:11px 15px;min-height:42px}
+#lakeville-concept .primary{background:var(--green);color:var(--on-green);border-color:var(--green)}
+#lakeville-concept .event-card .action{margin-top:auto;text-align:center;width:100%}
+#lakeville-concept .back{background:transparent;color:var(--green);border:0;padding:0;margin-bottom:20px;min-height:30px}
+#lakeville-concept .detail-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(240px,1fr);gap:24px}
+#lakeville-concept .box{background:var(--paper);border:1px solid var(--line);padding:22px;border-radius:12px}
+#lakeville-concept .stack{display:grid;gap:18px}
+#lakeville-concept .field{display:grid;gap:7px}
+#lakeville-concept .field input{width:100%}
+#lakeville-concept .row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+#lakeville-concept .slot{padding:18px 0;border-bottom:1px solid var(--line)}
+#lakeville-concept .slot:last-child{border-bottom:0}
+#lakeville-concept .notice{background:var(--pale);padding:14px 16px;border-radius:8px;color:var(--green);line-height:1.6}
+#lakeville-concept .small{font-size:12px}
+#lakeville-concept .admin-count{font-size:22px;color:var(--green);display:block;margin-top:8px}
+#lakeville-concept .table-wrap{overflow:auto}
+#lakeville-concept table{width:100%;border-collapse:collapse;min-width:420px;text-align:left}
+#lakeville-concept th{font-weight:500;color:var(--soft);font-size:12px}
+#lakeville-concept td,#lakeville-concept th{padding:14px 0;border-bottom:1px solid var(--line)}
+#lakeville-concept footer{padding:17px 28px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;color:var(--soft);font-size:11px}
+@media(max-width:650px){#lakeville-concept .cards,#lakeville-concept .detail-grid{grid-template-columns:1fr}#lakeville-concept .app-head,#lakeville-concept main{padding:20px}#lakeville-concept .app-tabs{padding:0 12px 12px}#lakeville-concept .app-tabs button{padding:10px}#lakeville-concept .event-art{min-height:80px}#lakeville-concept .concept-note{line-height:1.6}#lakeville-concept h2{font-size:23px}}
+</style>
+<script>
+(()=>{
+const root=document.getElementById('lakeville-concept'), content=root.querySelector('#lv-content'), role=root.querySelector('#lv-role');
+const events=[{name:'Family Night',month:'FEB',day:'12',time:'Friday · 6:00–8:00 PM',place:'School cafeteria',kind:'Family event',icon:'users',copy:'An evening of games, activities and time together for Lakeville families.'},{name:'Holiday Gift Shop',month:'DEC',day:'04',time:'Friday · 3:00–5:00 PM',place:'School library',kind:'Volunteers needed',icon:'gift',copy:'Help students choose a small gift and enjoy a seasonal PTA event.'},{name:'School Fundraiser',month:'MAR',day:'19',time:'Friday · 5:00–7:00 PM',place:'School gym',kind:'PTA fundraiser',icon:'heart-handshake',copy:'Bring families together to support school activities.'}];
+const saved={};
+let state={tab:['events','volunteers','signups','admin'].includes(saved.tab)?saved.tab:'events',role:saved.role==='admin'?'admin':'parent',registered:!!saved.registered,volunteer:!!saved.volunteer,count:Number(saved.count)||4,detail:null,checked:!!saved.checked};
+if(state.role==='parent'&&state.tab==='admin')state.tab='events';
+function persist(){}
+function icons(){if(globalThis.lucide)globalThis.lucide.createIcons();}
+function render(){
+role.value=state.role;
+root.querySelector('[data-tab="admin"]').hidden=state.role!=='admin';
+root.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tab===state.tab)));
+if(state.tab==='events'&&state.detail===null){content.innerHTML=`<div class="intro"><div><h2>Good things happen together.</h2><p class="muted">Find your next PTA event and join in.</p></div><span class="tag">Sample school year</span></div><div class="cards">${events.map((e,i)=>`<article class="event-card"><div class="event-art"><div class="date"><span>${e.month}</span>${e.day}</div></div><div class="card-body"><span class="tag">${e.kind}</span><div><h3>${e.name}</h3><p class="muted small">${e.time}<br>${e.place}</p></div><button type="button" class="action" data-event="${i}">View event</button></div></article>`).join('')}</div>`;}
+else if(state.tab==='events'){
+const e=events[state.detail];content.innerHTML=`<button type="button" class="back" data-action="back">← All events</button><div class="intro"><div><span class="tag">${e.kind}</span><h2 style="margin-top:12px">${e.name}</h2><p class="muted">${e.month} ${e.day} · ${e.time}</p></div></div><div class="detail-grid"><div class="stack"><div class="box stack"><div><h3>Come spend an evening with us</h3><p>${e.copy}</p></div><div><h3>Where</h3><p class="muted">${e.place}</p></div><div><h3>Before you arrive</h3><p class="muted">Register your family so the PTA can plan ahead. Check-in is at the entrance.</p></div></div></div><div class="box stack">${state.detail===0?(state.registered?`<div class="notice" role="status">Your sample registration is confirmed.<br>${state.count} family members · Family Night</div><button class="action" data-go="signups">View My Sign-ups</button>`:`<h3>Register your family</h3><p class="muted small">Free event · Sample registration</p><label class="field">Family members<select id="lv-count">${[1,2,3,4,5,6].map(n=>`<option ${n===state.count?'selected':''}>${n}</option>`).join('')}</select></label><button class="action primary" data-action="register">Confirm sample sign-up</button>`):`<h3>Interested in this event?</h3><p class="muted">Family Night shows an example registration journey.</p><button class="action primary" data-event="0">Try Family Night</button>`}</div></div>`;
+}else if(state.tab==='volunteers'){
+content.innerHTML=`<div class="intro"><div><h2>A little help goes a long way.</h2><p class="muted">Choose a shift for Family Night.</p></div><span class="tag">Sample shifts</span></div><div class="box">${[['Set-up team','5:00–6:00 PM','2 places open'],['Welcome & check-in','5:45–7:00 PM','1 place open'],['Clean-up team','8:00–8:30 PM','3 places open']].map((x,i)=>`<div class="slot row"><div><h3>${x[0]}</h3><p class="muted small">${x[1]} · ${i===0&&state.volunteer?'Your sample shift':x[2]}</p></div>${i===0?`<button class="action ${state.volunteer?'':'primary'}" data-action="volunteer">${state.volunteer?'Cancel sample shift':'Choose this shift'}</button>`:`<span class="tag">Preview only</span>`}</div>`).join('')}</div>`;
+}else if(state.tab==='signups'){
+content.innerHTML=`<div class="intro"><div><h2>Your PTA plans, in one place.</h2><p class="muted">Your family’s event registrations and volunteer shifts.</p></div></div><div class="stack">${state.registered?`<div class="box row"><div><span class="tag">Registered</span><h3 style="margin-top:12px">Family Night</h3><p class="muted">${state.count} family members · FEB 12 · 6:00 PM</p></div><button class="action" data-action="cancel">Cancel sample sign-up</button></div>`:''}${state.volunteer?`<div class="box row"><div><span class="tag">Volunteer shift</span><h3 style="margin-top:12px">Family Night · Set-up team</h3><p class="muted">FEB 12 · 5:00–6:00 PM</p></div><button class="action" data-go="volunteers">Manage shift</button></div>`:''}${!state.registered&&!state.volunteer?`<div class="box stack"><h3>No sample sign-ups yet</h3><p class="muted">Pick Family Night to try an event registration.</p><div><button class="action primary" data-event="0">Explore Family Night</button></div></div>`:''}</div>`;
+}else{
+content.innerHTML=`<div class="intro"><div><h2>Behind every great event.</h2><p class="muted">PTA workspace · Family Night</p></div><span class="tag">Published · Example</span></div><div class="cards"><div class="box">Registrations<strong class="admin-count">${24+(state.registered?1:0)} families</strong></div><div class="box">Volunteer shifts filled<strong class="admin-count">${7+(state.volunteer?1:0)} of 12</strong></div><div class="box">Checked in<strong class="admin-count">${state.checked?19:18} families</strong></div></div><div class="box" style="margin-top:20px"><h3>Event day check-in</h3><div class="table-wrap"><table><thead><tr><th>Family</th><th>Guests</th><th>Status</th><th>Action</th></tr></thead><tbody><tr><td>Sample family A</td><td>4</td><td>${state.checked?'Checked in':'Expected'}</td><td><button class="action" data-action="checkin">${state.checked?'Undo':'Check in'}</button></td></tr><tr><td>Sample family B</td><td>3</td><td>Checked in</td><td>—</td></tr></tbody></table></div></div>`;
+}
+icons();
+}
+root.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+if(b.dataset.tab){state.tab=b.dataset.tab;state.detail=null;}
+else if(b.dataset.go){state.tab=b.dataset.go;state.detail=null;}
+else if(b.dataset.event!==undefined){state.tab='events';state.detail=Number(b.dataset.event);}
+else if(b.dataset.action==='back')state.detail=null;
+else if(b.dataset.action==='register'){state.count=Number(root.querySelector('#lv-count').value);state.registered=true;}
+else if(b.dataset.action==='volunteer')state.volunteer=!state.volunteer;
+else if(b.dataset.action==='cancel')state.registered=false;
+else if(b.dataset.action==='checkin')state.checked=!state.checked;
+render();persist();});
+role.addEventListener('change',()=>{state.role=role.value;state.tab=state.role==='admin'?'admin':'events';state.detail=null;render();persist();});
+render();
+})();
+</script>
+</body></html>

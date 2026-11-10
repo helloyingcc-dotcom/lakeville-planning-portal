@@ -1,0 +1,22 @@
+{
+  // Cloudflare deploys this automatically on every push to main (Workers Builds).
+  "name": "lakeville-planning",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lakeville-planning",
+      "database_id": "PASTE-D1-DATABASE-ID-HERE"
+    }
+  ],
+  // Optional: uncomment after creating an R2 bucket named "lakeville-planning-files" to enable "Attach examples".
+  // "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "lakeville-planning-files" }],
+  "vars": {
+    // From Worker → Settings → Domains & Routes → workers.dev → Enable Cloudflare Access (shown in the pop-up).
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": ""
+  },
+  "observability": { "enabled": true }
+}
