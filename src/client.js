@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 const {tabs, features, steps, sections, PRIORITY, INTRO_KEY} = MODEL;
-const descriptions = {start:'A shared starting point for Jessie, Jimmy and DBY.',events:'Tell us how Lakeville runs events today. Start with one or two you know well.',features:'Choose what matters for the first version. You can leave anything undecided.',preview:'Explore one possible direction, then tell us what fits Lakeville.',workflow:'Walk us through a real event and decide who needs access.',questions:'Help us shape the first version and understand the accounting needs.'};
+const descriptions = {start:'A shared starting point for Lakeville and DBY.',events:'Tell us how Lakeville runs events today. Start with one or two you know well.',features:'Choose what matters for the first version. You can leave anything undecided.',preview:'Explore one possible direction, then tell us what fits Lakeville.',workflow:'Walk us through a real event and decide who needs access.',questions:'Help us shape the first version and understand the accounting needs.'};
 
 /* ---------- tiny DOM helpers ---------- */
 const ICONS = {
