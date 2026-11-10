@@ -8,7 +8,7 @@
     {
       "binding": "DB",
       "database_name": "lakeville-planning",
-      "database_id": "PASTE-D1-DATABASE-ID-HERE"
+      "database_id": "a3d9a49a-e440-4cab-9ddf-07fd4b49898f"
     }
   ],
   // Optional: uncomment after creating an R2 bucket named "lakeville-planning-files" to enable "Attach examples".
