@@ -16,8 +16,8 @@
   // "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "lakeville-planning-files" }],
   "vars": {
     // From Worker → Settings → Domains & Routes → workers.dev → Enable Cloudflare Access (shown in the pop-up).
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": ""
+    "ACCESS_TEAM_DOMAIN": "calm-art-0c96.cloudflareaccess.com",
+    "ACCESS_AUD": "37fc497fa3e217e669dcfe3c19091911ae17bdae35d958bca77b11b1e3c745ef"
   },
   "observability": { "enabled": true }
 }
