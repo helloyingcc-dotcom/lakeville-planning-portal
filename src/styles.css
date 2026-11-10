@@ -35,3 +35,28 @@ img{max-width:100%;display:block}
 .whoami{display:inline-flex;align-items:center;gap:6px}
 .edited{font-size:10px;color:#8c987f;margin-left:6px}
 .chat-message>div.message-head{flex-wrap:nowrap}
+
+/* files attached to answers */
+.answer-files:empty{display:none}
+.answer-file-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:4px}
+.answer-file{display:flex;align-items:center;gap:6px;background:#f6f8f1;border:1px solid #dfe6d5;border-radius:8px;padding:8px;min-width:0}
+.answer-file-link{display:flex;align-items:center;gap:10px;min-width:0;flex:1;text-decoration:none}
+.answer-file.is-image .answer-file-link{flex-direction:column;align-items:stretch;gap:6px}
+.answer-file img{width:100%;height:120px;object-fit:cover;border-radius:6px;background:#e9eee2}
+.answer-file-icon{width:36px;height:36px;border-radius:6px;background:#e6ecdd;color:#4f6a3c;display:grid;place-items:center;flex-shrink:0}
+.answer-file-text{min-width:0;display:grid;gap:2px}
+.answer-file-text strong{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.answer-file-text small{font-size:10px;color:#86927b}
+.answer-file.is-image{align-items:flex-start}
+.answer-file-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}
+.answer-file-tools small{font-size:11px;color:#8a967e}
+.attach-answer{border:1px dashed #c9d5bc!important;border-radius:7px;padding:6px 10px!important;color:#4f6a3c;font-size:12px}
+.attach-answer:hover{background:#f1f5ea}
+/* previous / next */
+.pagenav{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0 22px}
+.pagenav-btn{display:inline-flex;align-items:center;gap:10px;background:#fff;border:1px solid #dbe3d1;border-radius:9px;padding:10px 14px;color:#2f4d38;font-size:13px;text-align:left;min-height:48px}
+.pagenav-btn.next{text-align:right}
+.pagenav-btn small{display:block;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:#86927b}
+.pagenav-btn:hover{border-color:#9caf8b}
+.pagenav-count{font-size:11px;color:#86927b}
+@media(max-width:650px){.pagenav-count{display:none}.pagenav-btn{font-size:12px;padding:8px 10px}}

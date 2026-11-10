@@ -21,6 +21,7 @@ const ICONS = {
   clip:'<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
   file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>',
   send:'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/>',
   pencil:'<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
   trash:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
 };
@@ -68,7 +69,7 @@ async function api(url, opts = {}) {
 const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 /* ---------- state ---------- */
-const S = { tab: 'start', data: {}, records: {}, dirty: {}, loaded: false, busy: false, error: '', notice: '', incoming: [], me: null, nameEditing: false, nameBusy: false, nameError: '', commentsOpen: window.innerWidth > 1100, counts: [] };
+const S = { tab: 'start', data: {}, records: {}, files: [], fileBusy: {}, fileError: {}, dirty: {}, loaded: false, busy: false, error: '', notice: '', incoming: [], me: null, nameEditing: false, nameBusy: false, nameError: '', commentsOpen: window.innerWidth > 1100, counts: [] };
 const C = { scope: 'current', threads: [], active: null, messages: [], drafts: {}, uploads: {}, error: '', connected: false, busy: false, uploading: false, showResolved: false, composing: false, newAnchor: null, nextThreads: null, nextMessages: null, me: null, editing: null, editText: '', confirmDelete: null, outgoing: null, scrollAtEnd: true, listKey: '', lastList: '', lastThread: '', gen: 0 };
 const current = () => S.data[S.tab] || {};
 const fieldId = (tab, key) => 'answer-' + tab + '-' + key;
@@ -122,7 +123,58 @@ function field(f) {
   return h('div', { class: 'field' },
     h('div', { class: 'field-heading' }, h('label', { for: id }, f.label),
       h('button', { class: 'comment-anchor', type: 'button', 'data-anchor': f.key, 'aria-label': 'Comment on ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => comment(f) }, icon('message', 13), count ? String(count) : 'Comment')),
-    f.hint ? h('small', null, f.hint) : null, control);
+    f.hint ? h('small', null, f.hint) : null, control,
+    h('div', { class: 'answer-files', id: 'files-' + fieldId(tab, f.key) }, fileArea(tab, f.key)));
+}
+const fileUrl = id => '/api/answer-files?id=' + id;
+const answerImages = new Map();
+function answerImage(file) {
+  if (!answerImages.has(file.id)) answerImages.set(file.id, h('img', { src: fileUrl(file.id), alt: file.name, loading: 'lazy' }));
+  return answerImages.get(file.id);
+}
+function fileArea(tab, key) {
+  const k = tab + ':' + key, files = S.files.filter(x => x.section === tab && x.field_key === key);
+  const canUpload = !!S.me?.attachments, busy = !!S.fileBusy[k];
+  if (!canUpload && !files.length) return [];
+  let input;
+  return [
+    files.length ? h('div', { class: 'answer-file-list' }, files.map(file => {
+      const isImage = file.content_type.startsWith('image/');
+      return h('div', { class: isImage ? 'answer-file is-image' : 'answer-file' },
+        h('a', { href: fileUrl(file.id), target: '_blank', rel: 'noreferrer', class: 'answer-file-link', title: 'Open ' + file.name },
+          isImage ? answerImage(file) : h('span', { class: 'answer-file-icon' }, icon('file', 18)),
+          h('span', { class: 'answer-file-text' }, h('strong', null, file.name), h('small', null, `${size(file.size)} · ${file.author_name} · ${fmtTime(file.created_at)}`))),
+        S.me && file.author_id === S.me.email ? h('button', { class: 'quiet iconbutton', type: 'button', disabled: busy, 'aria-label': 'Remove ' + file.name, title: 'Remove file', onclick: () => removeAnswerFile(tab, key, file) }, icon('trash', 14)) : null);
+    })) : null,
+    canUpload ? h('div', { class: 'answer-file-tools' },
+      h('input', { type: 'file', hidden: true, multiple: true, accept: '.jpg,.jpeg,.png,.pdf,.xls,.xlsx', ref: el => { input = el; }, onchange: e => uploadAnswerFiles(tab, key, e.target.files) }),
+      h('button', { class: 'quiet attach-answer', type: 'button', disabled: busy || files.length >= 10, onclick: () => input.click() }, icon('clip', 13), busy ? 'Uploading…' : 'Attach file'),
+      h('small', null, S.fileError[k] || 'JPG, PNG, PDF or Excel · up to 20 MB each')) : null];
+}
+function renderFileArea(tab, key) { const el = $('files-' + fieldId(tab, key)); if (el) fill(el, fileArea(tab, key)); }
+function renderAllFileAreas() { for (const el of document.querySelectorAll('#main .answer-files')) { const key = el.id.slice(('files-' + fieldId(S.tab, '')).length); fill(el, fileArea(S.tab, key)); } }
+async function uploadAnswerFiles(tab, key, list) {
+  const k = tab + ':' + key;
+  if (!list?.length || S.fileBusy[k]) return;
+  S.fileBusy[k] = true; S.fileError[k] = ''; renderFileArea(tab, key);
+  try {
+    for (const file of Array.from(list)) {
+      if (file.size > 20 * 1024 * 1024) throw new Error(file.name + ' is larger than 20 MB.');
+      const form = new FormData(); form.append('file', file); form.append('section', tab); form.append('fieldKey', key);
+      const p = await api('/api/answer-files', { method: 'POST', body: form });
+      S.files = [...S.files.filter(x => x.id !== p.file.id), p.file];
+      renderFileArea(tab, key);
+    }
+  } catch (e) { S.fileError[k] = errMsg(e, 'Upload failed. Please try again.'); }
+  finally { S.fileBusy[k] = false; renderFileArea(tab, key); }
+}
+async function removeAnswerFile(tab, key, file) {
+  const k = tab + ':' + key;
+  if (!confirm('Remove "' + file.name + '"? Everyone will stop seeing it.')) return;
+  S.fileBusy[k] = true; S.fileError[k] = ''; renderFileArea(tab, key);
+  try { await api('/api/answer-files?id=' + file.id, { method: 'DELETE' }); S.files = S.files.filter(x => x.id !== file.id); }
+  catch (e) { S.fileError[k] = errMsg(e, 'Could not remove the file.'); }
+  finally { S.fileBusy[k] = false; renderFileArea(tab, key); }
 }
 const fields = list => h('div', { class: 'fields' }, list.map(field));
 function tabBody(tab) {
@@ -197,10 +249,18 @@ function renderMain() {
     h('div', { class: 'savebar' },
       h('div', null, h('strong', { id: 'saveState' }), h('small', { id: 'saveMeta' }), h('span', { role: 'status', id: 'notice' })),
       h('button', { class: 'primary', id: 'saveBtn', onclick: save }, icon('save', 16), h('span', { id: 'saveLabel' }))),
+    pageNav(tab),
     h('footer', null,
       h('span', { class: 'whoami' }, 'Signed in as ' + (S.me?.name || '…'), S.me?.named ? h('button', { class: 'quiet', type: 'button', onclick: () => { S.nameEditing = true; renderMain(); $('yourName')?.focus(); } }, '(change name)') : null, ' · ', h('a', { href: '/cdn-cgi/access/logout' }, 'Sign out')),
       h('span', null, 'No family or student personal details are needed.')));
   renderIncoming(); renderSaveBar(); renderLayoutState();
+}
+function pageNav(tab) {
+  const i = tabs.findIndex(t => t[0] === tab), prev = tabs[i - 1], next = tabs[i + 1];
+  return h('nav', { class: 'pagenav', 'aria-label': 'Page navigation' },
+    prev ? h('button', { class: 'pagenav-btn', type: 'button', onclick: () => setTab(prev[0]) }, icon('left', 15), h('span', null, h('small', null, 'Previous'), prev[1])) : h('span'),
+    h('span', { class: 'pagenav-count' }, `${i + 1} of ${tabs.length}`),
+    next ? h('button', { class: 'pagenav-btn next', type: 'button', onclick: () => setTab(next[0]) }, h('span', null, h('small', null, 'Next'), next[1]), icon('right', 15)) : h('span'));
 }
 function renderIncoming() {
   const el = $('incoming'); if (!el) return;
@@ -236,6 +296,7 @@ async function load() {
     const p = await api('/api/plan');
     S.records = Object.fromEntries(p.sections.map(s => [s.id, s]));
     S.data = Object.fromEntries(p.sections.map(s => [s.id, s.content]));
+    S.files = p.files || [];
     S.dirty = {}; S.incoming = []; S.loaded = true; S.notice = 'Saved answers loaded.';
   } catch (e) { S.error = errMsg(e, 'Could not load your answers.'); }
   renderNav(); renderMain();
@@ -256,7 +317,7 @@ function reload() {
   load();
 }
 function download() {
-  const payload = { project: 'Lakeville PTA Events App planning', exportedAt: new Date().toISOString(), sections: tabs.map(([id, title]) => ({ section: title, hasUnsavedChanges: !!S.dirty[id], lastSavedBy: S.records[id]?.updated_by || null, lastSavedAt: S.records[id]?.updated_at || null, answers: sections[id].filter(f => S.data[id]?.[f.key]).map(f => ({ question: f.label, answer: S.data[id][f.key] })) })) };
+  const payload = { project: 'Lakeville PTA Events App planning', exportedAt: new Date().toISOString(), sections: tabs.map(([id, title]) => ({ section: title, hasUnsavedChanges: !!S.dirty[id], lastSavedBy: S.records[id]?.updated_by || null, lastSavedAt: S.records[id]?.updated_at || null, answers: sections[id].filter(f => S.data[id]?.[f.key] || S.files.some(x => x.section === id && x.field_key === f.key)).map(f => ({ question: f.label, answer: S.data[id]?.[f.key] || '', files: S.files.filter(x => x.section === id && x.field_key === f.key).map(x => x.name) })) })) };
   const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
   const a = h('a', { href: url, download: 'lakeville-planning-responses.json' }); document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -271,6 +332,7 @@ async function syncPlan() {
     const incoming = changed.filter(s => S.dirty[s.id]).map(s => s.id);
     const clean = changed.filter(s => !S.dirty[s.id]);
     if (incoming.join() !== S.incoming.join()) { S.incoming = incoming; renderIncoming(); }
+    if (JSON.stringify(p.files || []) !== JSON.stringify(S.files)) { S.files = p.files || []; renderAllFileAreas(); }
     if (clean.length) {
       for (const s of clean) { S.records[s.id] = s; S.data[s.id] = s.content; }
       refreshFieldValues(S.tab); renderNav(); renderSaveBar();

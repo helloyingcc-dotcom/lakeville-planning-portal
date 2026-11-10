@@ -75,4 +75,20 @@ const t2 = id(); await call('ying', '/api/comments', J('POST', { requestId: t2, 
 const rs = await call('jessie', '/api/comments', J('PATCH', { threadId: t2, resolved: true, revision: 1 }));
 ok(rs.j.thread.resolved === 1, 'resolve');
 ok((await call('jessie', '/api/comments', J('POST', { requestId: id(), body: 'late', threadId: t2 }))).s === 409, 'no replies on resolved');
+// files attached to answers
+const af = (who, section, fieldKey, name, bytes, type) => { const f = new FormData(); f.append('file', new Blob([bytes], { type }), name); f.append('section', section); f.append('fieldKey', fieldKey); return call(who, '/api/answer-files', { method: 'POST', body: f }); };
+const xlsx = new Uint8Array([80, 75, 3, 4, 1, 2, 3]);
+let a1 = await af('jessie', 'events', 'event0Process', 'signup-sheet.xlsx', xlsx, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+ok(a1.s === 200 && a1.j.file.author_name === 'Jessie', 'excel attached to answer ' + JSON.stringify(a1.j));
+ok((await af('jessie', 'events', 'event0Process', 'flyer.png', png, 'image/png')).s === 200, 'png attached to answer');
+ok((await af('jessie', 'events', 'event0Process', 'notes.docx', xlsx, 'application/msword')).s === 400, 'word not allowed on answers');
+ok((await af('jessie', 'events', 'nope', 'x.png', png, 'image/png')).s === 400, 'unknown question rejected');
+ok((await af('jessie', 'events', 'event0Process', 'fake.pdf', new Uint8Array([1, 2, 3]), 'application/pdf')).s === 400, 'fake pdf rejected');
+let plan = await call('ying', '/api/plan');
+ok(plan.j.files.length === 2 && plan.j.files[0].name === 'signup-sheet.xlsx', 'files listed with answers');
+ok((await call('ying', '/api/answer-files?id=' + a1.j.file.id)).s === 200, 'teammate can open file');
+ok((await call('ying', '/api/answer-files?id=' + a1.j.file.id, { method: 'DELETE' })).s === 403, 'cannot remove someone else\'s file');
+ok((await call('jessie', '/api/answer-files?id=' + a1.j.file.id, { method: 'DELETE' })).s === 200, 'uploader removes own file');
+ok((await call('ying', '/api/answer-files?id=' + a1.j.file.id)).s === 404, 'removed file gone');
+ok((await call('ying', '/api/plan')).j.files.length === 1, 'list updated after removal');
 console.log(`API tests: ${pass} passed, ${fail} failed`);

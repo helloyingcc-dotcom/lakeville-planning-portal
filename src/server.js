@@ -29,6 +29,8 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS comment_attachments (id TEXT PRIMARY KEY NOT NULL, object_key TEXT NOT NULL, author_id TEXT NOT NULL, name TEXT NOT NULL, content_type TEXT NOT NULL, size INTEGER NOT NULL, created_at TEXT NOT NULL, message_id TEXT REFERENCES comment_messages(request_id))`,
   `CREATE TABLE IF NOT EXISTS people (email TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS comment_messages_thread ON comment_messages(thread_id, seq)`,
+  `CREATE TABLE IF NOT EXISTS answer_files (id TEXT PRIMARY KEY NOT NULL, object_key TEXT NOT NULL, section TEXT NOT NULL, field_key TEXT NOT NULL, author_id TEXT NOT NULL, author_name TEXT NOT NULL, name TEXT NOT NULL, content_type TEXT NOT NULL, size INTEGER NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS answer_files_field ON answer_files(section, field_key, created_at)`,
 ];
 let schemaReady = null;
 function ensureSchema(db) {
@@ -90,7 +92,8 @@ async function getUser(request, env) {
 /* ---------------- planning answers ---------------- */
 async function planGet(env) {
   const r = await env.DB.prepare('SELECT * FROM planning_sections').all();
-  return json({ sections: r.results.map(row => ({ ...row, content: JSON.parse(row.content) })) });
+  const files = await env.DB.prepare(`SELECT f.id,f.section,f.field_key,f.author_id,${NAME('f', 'author_id', 'author_name')} AS author_name,f.name,f.content_type,f.size,f.created_at FROM answer_files f ORDER BY f.created_at`).all();
+  return json({ sections: r.results.map(row => ({ ...row, content: JSON.parse(row.content) })), files: files.results });
 }
 async function planPut(request, env, user) {
   const raw = await request.text();
@@ -190,25 +193,36 @@ async function commentsDelete(request, env, user) {
 /* ---------------- attachments (optional R2) ---------------- */
 const TYPES = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
 const LIMIT = 20 * 1024 * 1024;
+const ANSWER_EXTS = ['pdf', 'jpg', 'jpeg', 'png', 'xls', 'xlsx'];
+// Reads one uploaded file, checks type by extension AND file signature. Returns {error,status} or {name,ext,contentType,bytes,size}.
+async function readUpload(request, form, allowed) {
+  const file = form.get('file');
+  if (!file || typeof file === 'string') return { error: 'Choose a file to upload.', status: 400 };
+  const name = String(file.name || 'file').replace(/[\\/\x00-\x1f\x7f]/g, '_').slice(0, 180), ext = name.split('.').at(-1)?.toLowerCase() || '', contentType = TYPES[ext];
+  if (!contentType || !allowed.includes(ext)) return { error: allowed.includes('doc') ? 'Choose a Word, Excel, PDF, JPG or PNG file.' : 'Choose a JPG, PNG, PDF or Excel file.', status: 400 };
+  if (!file.size || file.size > LIMIT) return { error: 'Each file must be between 1 byte and 20 MB.', status: 413 };
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const starts = sig => sig.every((v, i) => bytes[i] === v);
+  const valid = ext === 'pdf' ? starts([0x25, 0x50, 0x44, 0x46, 0x2d]) : ext === 'png' ? starts([137, 80, 78, 71, 13, 10, 26, 10]) : ['jpg', 'jpeg'].includes(ext) ? starts([255, 216, 255]) : ['doc', 'xls'].includes(ext) ? starts([208, 207, 17, 224, 161, 177, 26, 225]) : starts([80, 75, 3, 4]);
+  if (!valid) return { error: 'The file contents do not match its extension. Please choose the original document or image.', status: 400 };
+  return { name, ext, contentType, bytes, size: file.size };
+}
+function serveFile(file, row) {
+  const inline = ['application/pdf', 'image/png', 'image/jpeg'].includes(row.content_type);
+  return new Response(file.body, { headers: { 'Content-Type': row.content_type, 'Content-Length': String(row.size), 'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(row.name)}`, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:" } });
+}
 async function attachPost(request, env, user) {
   if (!env.BUCKET) return json({ error: 'File attachments are not switched on for this portal.' }, 503);
   if (Number(request.headers.get('content-length')) > LIMIT + 100000) return json({ error: 'Each file must be 20 MB or smaller.' }, 413);
   let form; try { form = await request.formData(); } catch { return json({ error: 'Choose a file to upload.' }, 400); }
-  const file = form.get('file');
-  if (!file || typeof file === 'string') return json({ error: 'Choose a file to upload.' }, 400);
-  const name = String(file.name || 'file').replace(/[\\/\x00-\x1f\x7f]/g, '_').slice(0, 180), ext = name.split('.').at(-1)?.toLowerCase() || '', contentType = TYPES[ext];
-  if (!contentType) return json({ error: 'Choose a Word, Excel, PDF, JPG or PNG file.' }, 400);
-  if (!file.size || file.size > LIMIT) return json({ error: 'Each file must be between 1 byte and 20 MB.' }, 413);
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const starts = sig => sig.every((v, i) => bytes[i] === v);
-  const valid = ext === 'pdf' ? starts([0x25, 0x50, 0x44, 0x46, 0x2d]) : ext === 'png' ? starts([137, 80, 78, 71, 13, 10, 26, 10]) : ['jpg', 'jpeg'].includes(ext) ? starts([255, 216, 255]) : ['doc', 'xls'].includes(ext) ? starts([208, 207, 17, 224, 161, 177, 26, 225]) : starts([80, 75, 3, 4]);
-  if (!valid) return json({ error: 'The file contents do not match its extension. Please choose the original document or image.' }, 400);
+  const up = await readUpload(request, form, Object.keys(TYPES));
+  if (up.error) return json({ error: up.error }, up.status);
   const id = crypto.randomUUID(), key = 'examples/' + id;
-  await env.BUCKET.put(key, bytes, { httpMetadata: { contentType } });
+  await env.BUCKET.put(key, up.bytes, { httpMetadata: { contentType: up.contentType } });
   try {
-    await env.DB.prepare('INSERT INTO comment_attachments (id,object_key,author_id,name,content_type,size,created_at,message_id) VALUES (?,?,?,?,?,?,?,NULL)').bind(id, key, user.userId, name, contentType, file.size, nowIso()).run();
+    await env.DB.prepare('INSERT INTO comment_attachments (id,object_key,author_id,name,content_type,size,created_at,message_id) VALUES (?,?,?,?,?,?,?,NULL)').bind(id, key, user.userId, up.name, up.contentType, up.size, nowIso()).run();
   } catch (e) { try { await env.BUCKET.delete(key); } catch { /* ignore */ } throw e; }
-  return json({ attachment: { id, name, content_type: contentType, size: file.size } });
+  return json({ attachment: { id, name: up.name, content_type: up.contentType, size: up.size } });
 }
 async function attachGet(request, env, user) {
   const id = new URL(request.url).searchParams.get('id');
@@ -217,8 +231,7 @@ async function attachGet(request, env, user) {
   if (!row || !env.BUCKET) return json({ error: 'File not found.' }, 404);
   const file = await env.BUCKET.get(row.object_key);
   if (!file) return json({ error: 'File not found.' }, 404);
-  const inline = ['application/pdf', 'image/png', 'image/jpeg'].includes(row.content_type);
-  return new Response(file.body, { headers: { 'Content-Type': row.content_type, 'Content-Length': String(row.size), 'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(row.name)}`, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:" } });
+  return serveFile(file, row);
 }
 async function attachDelete(request, env, user) {
   const id = new URL(request.url).searchParams.get('id');
@@ -226,6 +239,45 @@ async function attachDelete(request, env, user) {
   const row = await env.DB.prepare('DELETE FROM comment_attachments WHERE id=? AND author_id=? AND message_id IS NULL RETURNING object_key').bind(id, user.userId).first();
   if (!row) return json({ error: 'This file is already posted or unavailable.' }, 409);
   try { await env.BUCKET?.delete(row.object_key); } catch { /* ignore */ }
+  return json({ removed: true });
+}
+
+/* ---------------- files attached to answers (optional R2) ---------------- */
+const MAX_FILES_PER_QUESTION = 10;
+async function answerFilePost(request, env, user) {
+  if (!env.BUCKET) return json({ error: 'File uploads are not switched on for this portal yet.' }, 503);
+  if (Number(request.headers.get('content-length')) > LIMIT + 100000) return json({ error: 'Each file must be 20 MB or smaller.' }, 413);
+  let form; try { form = await request.formData(); } catch { return json({ error: 'Choose a file to upload.' }, 400); }
+  const section = String(form.get('section') || ''), fieldKey = String(form.get('fieldKey') || '');
+  if (!Object.hasOwn(MODEL.sections, section) || !MODEL.sections[section].some(f => f.key === fieldKey)) return json({ error: 'Choose a valid question.' }, 400);
+  const count = await env.DB.prepare('SELECT count(*) AS n FROM answer_files WHERE section=? AND field_key=?').bind(section, fieldKey).first('n');
+  if (count >= MAX_FILES_PER_QUESTION) return json({ error: `This question already has ${MAX_FILES_PER_QUESTION} files. Remove one before adding another.` }, 409);
+  const up = await readUpload(request, form, ANSWER_EXTS);
+  if (up.error) return json({ error: up.error }, up.status);
+  const id = crypto.randomUUID(), key = 'answers/' + id, now = nowIso();
+  await env.BUCKET.put(key, up.bytes, { httpMetadata: { contentType: up.contentType } });
+  try {
+    await env.DB.prepare('INSERT INTO answer_files (id,object_key,section,field_key,author_id,author_name,name,content_type,size,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(id, key, section, fieldKey, user.userId, user.displayName, up.name, up.contentType, up.size, now).run();
+  } catch (e) { try { await env.BUCKET.delete(key); } catch { /* ignore */ } throw e; }
+  return json({ file: { id, section, field_key: fieldKey, author_id: user.userId, author_name: user.displayName, name: up.name, content_type: up.contentType, size: up.size, created_at: now } });
+}
+async function answerFileGet(request, env) {
+  const id = new URL(request.url).searchParams.get('id');
+  if (!uuid(id)) return json({ error: 'Invalid file.' }, 400);
+  const row = await env.DB.prepare('SELECT * FROM answer_files WHERE id=?').bind(id).first();
+  if (!row || !env.BUCKET) return json({ error: 'File not found.' }, 404);
+  const file = await env.BUCKET.get(row.object_key);
+  if (!file) return json({ error: 'File not found.' }, 404);
+  return serveFile(file, row);
+}
+async function answerFileDelete(request, env, user) {
+  const id = new URL(request.url).searchParams.get('id');
+  if (!uuid(id)) return json({ error: 'Invalid file.' }, 400);
+  const row = await env.DB.prepare('SELECT * FROM answer_files WHERE id=?').bind(id).first();
+  if (!row) return json({ removed: true });
+  if (row.author_id !== user.userId) return json({ error: 'Only the person who uploaded a file can remove it.' }, 403);
+  await env.DB.prepare('DELETE FROM answer_files WHERE id=? AND author_id=?').bind(id, user.userId).run();
+  try { await env.BUCKET?.delete(row.object_key); } catch { /* storage cleanup is best-effort */ }
   return json({ removed: true });
 }
 
@@ -277,6 +329,11 @@ async function handle(request, env) {
       if (method === 'POST') return await commentsPost(request, env, user);
       if (method === 'PATCH') return await commentsPatch(request, env, user);
       if (method === 'DELETE') return await commentsDelete(request, env, user);
+    }
+    if (path === '/api/answer-files') {
+      if (method === 'GET') return await answerFileGet(request, env);
+      if (method === 'POST') return await answerFilePost(request, env, user);
+      if (method === 'DELETE') return await answerFileDelete(request, env, user);
     }
     if (path === '/api/attachments') {
       if (method === 'GET') return await attachGet(request, env, user);

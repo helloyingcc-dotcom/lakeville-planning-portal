@@ -1,6 +1,6 @@
 # Lakeville PTA – Events App planning portal
 
-A private, shared planning questionnaire for Lakeville PTA (Jessie, Jimmy) and DBY. It covers six sections of questions, saved shared answers, team comments with replies, resolve, edit, delete and attachments, a "Comment on intro" anchor on every page, and an illustrative app preview.
+A private, shared planning questionnaire for Lakeville PTA (Jessie, Jimmy) and DBY. It covers six sections of questions, saved shared answers, files attached to any answer (JPG, PNG, PDF, Excel), Previous/Next paging, team comments with replies, resolve, edit, delete and attachments, a "Comment on intro" anchor on every page, and an illustrative app preview.
 
 It runs as **one Cloudflare Worker** with a D1 database. There is no framework, no npm install and no build server.
 
@@ -25,8 +25,8 @@ It runs as **one Cloudflare Worker** with a D1 database. There is no framework, 
 3. Test locally (Node 22.5+ and Python Playwright with Chrome):
    ```
    node test/harness.mjs &          # local stand-in for Cloudflare (SQLite + fake sign-in)
-   node test/api-test.mjs           # 38 API checks
-   python3 test/ui-test.py          # 25 two-person browser checks (restart harness first for clean data)
+   node test/api-test.mjs           # API checks
+   python3 test/ui-test.py          # two-person browser checks (restart harness first for clean data)
    ```
 4. Push to `main`. Cloudflare deploys it.
 
