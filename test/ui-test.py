@@ -34,19 +34,19 @@ with sync_playwright() as p:
     check(True, 'answer synced to second person')
     y.screenshot(path='/tmp/shot-start.png', full_page=False)
     # intro comment
-    y.click('#introComment')
-    expect(y.locator('.compose-context strong')).to_have_text('Page introduction')
+    y.locator('[data-anchor="goal"]').click()
+    expect(y.locator('.compose-context strong')).to_have_text('What is the main improvement you want?')
     y.fill('#team-comment', 'Can we make the welcome shorter?')
     y.click('#sendBtn')
     expect(y.locator('.chat-message')).to_have_count(1)
-    expect(y.locator('#introComment')).to_contain_text('1 on intro', timeout=6000)
+    expect(y.locator('[data-anchor="goal"]')).to_have_text('1', timeout=6000)
     check(True, 'intro count shows')
     # tools only on own messages
     check(y.locator('.message-tools').count() == 1, 'ying sees edit/delete on own message')
     # jessie sees & replies
     j.click('.panel-tab:has-text("Questions for DBY")')
     expect(j.locator('.thread-card')).to_have_count(1, timeout=6000)
-    check(j.locator('.thread-card strong').inner_text() == 'Page introduction', 'sidebar label Page introduction')
+    check(j.locator('.thread-card strong').inner_text() == 'What is the main improvement you want?', 'sidebar shows question label')
     j.click('.thread-card')
     expect(j.locator('.chat-message')).to_have_count(1)
     check(j.locator('.message-tools').count() == 0, 'jessie sees no edit/delete on Ying message')
@@ -73,7 +73,7 @@ with sync_playwright() as p:
     # jump to intro
     y.click('.context-link')
     time.sleep(0.6)
-    check('comment-highlight' in (y.locator('#answer-start-intro').get_attribute('class') or ''), 'jump outlines page intro')
+    check('comment-highlight' in (y.locator('#answer-start-goal').get_attribute('class') or ''), 'jump outlines the question')
     # attach + delete
     y.set_input_files('.attachment-tools input[type=file]', files=[{'name':'example.png','mimeType':'image/png','buffer':bytes([137,80,78,71,13,10,26,10,0,0,0,0])}])
     expect(y.locator('.draft-attachment')).to_have_count(1)
@@ -91,7 +91,7 @@ with sync_playwright() as p:
     expect(y.locator('.chat-message')).to_have_count(1, timeout=6000)
     y.locator('.message-tools button', has_text='Delete').click(); y.locator('.message-confirm .danger').click()
     expect(y.locator('.thread-card')).to_have_count(0)
-    expect(y.locator('#introComment')).to_have_text('Comment on intro', timeout=6000)
+    expect(y.locator('[data-anchor="goal"]')).to_have_text('Ask DBY', timeout=6000)
     expect(j.locator('.comment-empty')).to_be_visible(timeout=6000)
     check(True, 'thread removed for both after last delete')
     # field comment with selected text + other tabs
@@ -143,6 +143,7 @@ with sync_playwright() as p:
     check(True, 'owner saves Pro notes')
     y.screenshot(path='/tmp/shot-pro.png')
     check(j.locator('.pagenav-btn').count() >= 1, 'jessie paging ok')
+    check(y.locator('#introComment').count() == 0 and y.locator('.section-comment').count() == 0, 'intro + page-level DBY buttons removed')
     # files on answers
     y.click('nav button[aria-label="Current events"]')
     y.set_input_files('#files-answer-events-event0Process input[type=file]', files=[{'name':'signups.png','mimeType':'image/png','buffer':bytes([137,80,78,71,13,10,26,10,0,0,0,0])},{'name':'budget.xlsx','mimeType':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','buffer':bytes([80,75,3,4,0,0])}])
