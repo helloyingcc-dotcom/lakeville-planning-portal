@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 const r = f => readFileSync(new URL(f, import.meta.url), 'utf8');
 const model = r('./src/model.js');
+const lion = r('./src/client.js').match(/const LION_IMG = '([^']+)'/)[1];
 const version = new Date().toISOString().slice(0, 16).replace('T', ' ');
 const html = r('./src/page.html')
   .replace('/*__CSS__*/', () => r('./src/styles.css'))
@@ -9,7 +10,7 @@ const html = r('./src/page.html')
 const worker = r('./src/server.js')
   .replace('/*__MODEL__*/', () => model)
   .replace('/*__HTML__*/""', () => JSON.stringify(html))
-  .replace('/*__PREVIEW__*/""', () => JSON.stringify(r('./src/preview.html')))
+  .replace('/*__PREVIEW__*/""', () => JSON.stringify(r('./src/preview.html').replace('__LION_DATA__', () => lion)))
   .replace('/*__VERSION__*/"dev"', () => JSON.stringify(version));
 
 writeFileSync(new URL('./worker.js', import.meta.url), worker);
