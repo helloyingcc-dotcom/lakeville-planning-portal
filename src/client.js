@@ -75,6 +75,7 @@ const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'applic
 const S = { base: {}, pending: {}, saving: {}, failed: {}, conflicts: {}, panelView: 'team', tab: 'start', data: {}, records: {}, files: [], fileBusy: {}, fileError: {}, dirty: {}, loaded: false, busy: false, error: '', notice: '', incoming: [], me: null, nameEditing: false, nameBusy: false, nameError: '', commentsOpen: window.innerWidth > 1100, counts: [] };
 const C = { scope: 'all', threads: [], active: null, messages: [], drafts: {}, uploads: {}, error: '', connected: false, busy: false, uploading: false, showResolved: false, composing: false, newAnchor: null, nextThreads: null, nextMessages: null, me: null, editing: null, editText: '', confirmDelete: null, outgoing: null, scrollAtEnd: true, listKey: '', lastList: '', lastThread: '', gen: 0 };
 const postTopic = () => T.filter === 'All' ? (T.topics.includes('General') ? 'General' : T.topics[0]) : T.filter;
+const F = { flags: [], composing: null, answering: null, busy: false, error: '', last: '', drafts: {} };
 const T = { messages: [], topics: ['General'], filter: 'All', drafts: {}, ref: null, me: null, readOnly: false, editing: null, editText: '', confirmDelete: null, busy: false, error: '', last: '', newTopic: null, nextBefore: null, scrollAtEnd: true, loaded: false };
 const current = () => S.data[S.tab] || {};
 const fieldId = (tab, key) => 'answer-' + tab + '-' + key;
@@ -131,10 +132,12 @@ function field(f) {
   return h('div', { class: 'field' },
     h('div', { class: 'field-heading' }, h('label', { for: id }, f.label),
       ownerOnly(tab) ? null : h('span', { class: 'anchor-group' },
+        flagButton('field:' + tab + ':' + f.key),
         S.me ? h('button', { class: 'comment-anchor team-anchor', type: 'button', 'aria-label': 'Discuss with the Lakeville team: ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => openTeam({ section: tab, field: f.key, label: titleFor(tab) + ' › ' + (sections[tab].find(x => x.key === f.key)?.label || f.label) }) }, icon('users', 13), 'Discuss with team') : null,
         h('button', { class: 'comment-anchor', type: 'button', 'data-anchor': f.key, 'aria-label': 'Ask DBY about ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => comment(f) }, icon('message', 13), count ? String(count) : 'Ask DBY'))),
     f.hint ? h('small', null, f.hint) : null, control,
     h('div', { id: 'conflict-' + id }),
+    ownerOnly(tab) ? null : flagSlot('field:' + tab + ':' + f.key),
     h('div', { class: 'history', id: 'history-' + id }, historyLink(tab, f.key)),
     f.options || ownerOnly(tab) ? null : h('div', { class: 'answer-files', id: 'files-' + fieldId(tab, f.key) }, fileArea(tab, f.key)));
 }
@@ -219,6 +222,7 @@ function tabBody(tab) {
     h('section', { class: 'welcome' },
       h('div', null, h('span', { class: 'eyebrow' }, 'A SIMPLE FIRST STEP'), h('h2', null, 'Your events. Your priorities.', h('br'), 'A concept we can shape together.'),
         h('p', null, 'Short answers are enough. Add what you know now and return whenever you need. Everyone invited to this workspace can view and edit the same planning answers.'),
+        h('p', null, 'Everything here plans your ' + TIERS.base.name + ' app (' + TIERS.base.price + '). Tell us everything you wish for anyway: if something goes beyond this plan, DBY will flag it ⚑ and ask whether you’d like it saved for a future upgrade.'),
         null),
       h('div', { class: 'path' }, [['01', 'Share how things work today', 'Events, tools and what gets in the way.'], ['02', 'Explore a first concept', 'Review the sample app and priorities.'], ['03', 'Talk it through', 'Confirm the scope before an estimate.']].map(([n, a, b]) => h('div', null, h('span', null, n), h('p', null, h('strong', null, a), h('small', null, b)))))),
     h('section', { class: 'panel', id: 'team-goal' }, h('h2', null, 'Your team & goal'), h('p', { class: 'muted' }, 'Tell us who’s helping and what matters most.'), fields(sec))];
@@ -247,6 +251,7 @@ function tabBody(tab) {
       h('div', { class: 'featurelist' }, pro.map(([id, title, desc]) => h('section', { class: 'feature tier-pro' },
         h('div', null, h('span', { class: 'tier-badge pro' }, 'Pro'), h('h2', null, title), h('p', null, desc)),
         h('div', null, field({ key: id + 'Signal', label: 'Signal from Lakeville', options: SIGNAL }), field({ key: id + 'Evidence', label: 'Evidence', hint: 'What they said and where' }))))),
+      h('section', { class: 'panel', id: 'flag-overview' }, flagOverview()),
       h('section', { class: 'panel' }, h('h2', null, 'Pricing & ideas'), fields(sec.slice(-3)))];
   }
   if (tab === 'preview') return [
@@ -296,6 +301,8 @@ function renderMain() {
         null)),
     h('div', { class: 'context' }, h('span', { class: 'dot' }), h('span', null, 'Examples are illustrative. Lakeville’s confirmed details belong in the answer fields.'),
       null),
+    ownerOnly(tab) ? null : h('div', { class: 'scope-note' }, h('span', { class: 'flag-icon', 'aria-hidden': 'true' }, '⚑'),
+      h('span', null, 'These questions plan your ', h('strong', null, TIERS.base.name), ' app (' + TIERS.base.price + '). If something you describe goes beyond it, DBY will flag it like this and ask whether you’d like it planned for a future upgrade. Your current plan doesn’t change.')),
     h('div', { class: 'autosave-note' }, icon('save', 14), h('span', null, 'Answers save automatically as you type. Deleted something by mistake? Use ', h('strong', null, 'Earlier versions'), ' under the question to bring it back.')),
     h('div', { id: 'incoming' }),
     !S.loaded && !S.error ? h('p', { role: 'status' }, 'Loading shared answers…') : null,
@@ -647,6 +654,8 @@ function messageView(m) {
         h('div', null, h('button', { class: 'quiet', type: 'button', disabled: C.busy, onclick: () => { C.editing = null; renderPanel(); } }, 'Cancel'),
           h('button', { class: 'primary', type: 'button', disabled: C.busy, onclick: () => saveEdit(m) }, C.busy ? 'Saving…' : 'Save')))
       : m.body ? h('p', null, m.body) : null,
+    flagSlot('ask:' + m.request_id),
+    !mine && S.me?.isOwner ? h('div', { class: 'message-tools' }, flagButton('ask:' + m.request_id)) : null,
     m.attachments?.length ? h('div', { class: 'message-attachments' }, m.attachments.map(file => h('div', null,
       file.content_type.startsWith('image/') ? h('a', { href: '/api/attachments?id=' + file.id, target: '_blank', rel: 'noreferrer' }, cachedImage(file)) : null,
       h('a', { class: 'file-link', href: '/api/attachments?id=' + file.id, target: '_blank', rel: 'noreferrer' }, icon('file', 17), h('span', null, file.name, h('small', null, size(file.size) + ' · ' + (file.content_type.startsWith('image/') || file.content_type === 'application/pdf' ? 'Open example' : 'Download example'))))))) : null,
@@ -781,6 +790,8 @@ function teamMessageView(m) {
         h('div', null, h('button', { class: 'quiet', type: 'button', disabled: T.busy, onclick: () => { T.editing = null; renderPanel(); } }, 'Cancel'),
           h('button', { class: 'primary', type: 'button', disabled: T.busy, onclick: () => teamCall(async () => { await api('/api/team', jsonOpts('PATCH', { id: m.id, body: T.editText })); T.editing = null; }, 'Could not edit the message.') }, T.busy ? 'Saving…' : 'Save')))
       : h('p', null, m.body),
+    flagSlot('team:' + m.id),
+    !mine && S.me?.isOwner ? h('div', { class: 'message-tools' }, flagButton('team:' + m.id)) : null,
     mine && !editing ? (confirming
       ? h('div', { class: 'message-confirm', role: 'group', 'aria-label': 'Confirm delete' }, h('span', null, 'Delete this message?'),
         h('button', { class: 'quiet', type: 'button', disabled: T.busy, onclick: () => { T.confirmDelete = null; renderPanel(); } }, 'Cancel'),
@@ -820,14 +831,81 @@ function renderTeam(panel) {
   if (focusId) { const el = $(focusId); if (el && !el.disabled) { el.focus({ preventScroll: true }); if (caret && 'selectionStart' in el) try { el.setSelectionRange(caret[0], caret[1]); } catch { /* not text */ } } }
 }
 
+/* ---------- "beyond Essentials" flags ---------- */
+const flagOf = target => F.flags.find(f => f.target === target);
+const flagDomId = target => 'flag-' + target.replace(/[^a-z0-9]/gi, '-');
+const ANSWER_TEXT = { plan: 'Yes, plan it for a future upgrade', skip: 'No, not needed' };
+function flagButton(target) {
+  if (!S.me?.isOwner) return null;
+  const f = flagOf(target);
+  return h('button', { class: 'comment-anchor flag-anchor' + (f ? ' on' : ''), type: 'button', 'data-target': target, title: 'Flag as beyond the Essentials plan (only you can flag)', onclick: () => { F.composing = F.composing === target ? null : target; F.drafts[target] ??= f?.note || 'This goes beyond the School-Year Essentials plan.'; F.error = ''; renderFlagSlots(true); setTimeout(() => $(flagDomId(target) + '-note')?.focus(), 0); } }, '⚑ ', f ? 'Flagged' : 'Beyond Essentials?');
+}
+function flagSlot(target) { return h('div', { class: 'flag-slot', 'data-flag-target': target }, flagView(target)); }
+function flagView(target) {
+  const f = flagOf(target), did = flagDomId(target), owner = S.me?.isOwner;
+  const err = F.error && (F.composing === target || F.answering === f?.id) ? h('div', { class: 'comment-error', role: 'alert' }, F.error) : null;
+  if (owner && F.composing === target) return h('form', { class: 'scope-flag composing', onsubmit: e => { e.preventDefault(); flagCall(async () => { await api('/api/flags', jsonOpts('POST', { id: f?.id || crypto.randomUUID(), target, note: F.drafts[target] || '' })); F.composing = null; delete F.drafts[target]; }); } },
+    h('label', { for: did + '-note' }, '⚑ Note to Lakeville (they’ll see this)'),
+    h('textarea', { id: did + '-note', rows: 2, maxlength: 1000, value: F.drafts[target] || '', oninput: e => { F.drafts[target] = e.target.value; } }),
+    err,
+    h('div', { class: 'flag-actions' }, h('button', { class: 'primary', type: 'submit', disabled: F.busy }, f ? 'Save note' : 'Flag as beyond Essentials'), h('button', { class: 'quiet', type: 'button', onclick: () => { F.composing = null; renderFlagSlots(true); } }, 'Cancel')));
+  if (!f) return null;
+  const asking = !f.answer || F.answering === f.id, nkey = 'ans:' + f.id;
+  const answer = a => flagCall(async () => { await api('/api/flags', jsonOpts('PATCH', { id: f.id, answer: a, note: F.drafts[nkey] || '' })); F.answering = null; delete F.drafts[nkey]; });
+  return h('div', { class: 'scope-flag' + (f.answer ? ' answered ' + f.answer : '') },
+    h('strong', null, '⚑ Beyond your Essentials plan'),
+    h('p', null, f.note),
+    asking ? [
+      h('p', { class: 'flag-q' }, 'Should DBY plan this for a future upgrade? Your current plan doesn’t change either way.'),
+      h('label', { class: 'sr-only', for: did + '-ans' }, 'Optional note'),
+      h('input', { id: did + '-ans', maxlength: 1000, placeholder: 'Optional: add a note for DBY', value: F.drafts[nkey] || '', oninput: e => { F.drafts[nkey] = e.target.value; } }),
+      err,
+      h('div', { class: 'flag-actions' },
+        h('button', { class: 'primary', type: 'button', disabled: F.busy, onclick: () => answer('plan') }, 'Yes, plan it'),
+        h('button', { class: 'quiet', type: 'button', disabled: F.busy, onclick: () => answer('skip') }, 'No, not needed'),
+        f.answer ? h('button', { class: 'quiet', type: 'button', onclick: () => { F.answering = null; renderFlagSlots(true); } }, 'Cancel') : null)]
+    : h('p', { class: 'flag-answer' }, h('span', null, (f.answered_name || 'Lakeville') + ': ' + ANSWER_TEXT[f.answer] + (f.answer_note ? ' · “' + f.answer_note + '”' : '')),
+      h('button', { class: 'quiet', type: 'button', onclick: () => { F.answering = f.id; F.drafts[nkey] = f.answer_note || ''; renderFlagSlots(true); } }, 'Change answer')),
+    owner ? h('div', { class: 'flag-owner' }, h('small', null, 'Only you see this row:'),
+      h('button', { class: 'quiet', type: 'button', onclick: () => { F.composing = target; F.drafts[target] = f.note; renderFlagSlots(true); } }, 'Edit note'),
+      h('button', { class: 'quiet', type: 'button', disabled: F.busy, onclick: () => flagCall(async () => { await api('/api/flags?id=' + f.id, { method: 'DELETE' }); F.flags = F.flags.filter(x => x.id !== f.id); }) }, 'Remove flag')) : null);
+}
+function flagOverview() {
+  const list = F.flags, count = a => list.filter(f => f.answer === a).length;
+  const where = f => f.kind === 'field' ? f.label : f.label + (f.section ? ' (' + (allTabs.find(t => t[0] === f.section)?.[1] || f.section) + ')' : '');
+  return [h('h2', null, 'Flagged beyond Essentials'),
+    h('p', { class: 'muted' }, list.length ? `${list.length} flagged · ${count('plan')} want it planned · ${count('skip')} not needed · ${count('')} waiting for Lakeville` : 'Nothing flagged yet. Use ⚑ Beyond Essentials? next to any answer, team message or question to ask Lakeville.'),
+    list.length ? h('ul', { class: 'flag-list' }, list.map(f => h('li', null,
+      h('span', { class: 'flag-status ' + (f.answer || 'waiting') }, f.answer === 'plan' ? 'Plan it' : f.answer === 'skip' ? 'Not needed' : 'Waiting'),
+      h('div', null, h('strong', null, where(f)), h('p', null, '“' + (f.excerpt.length > 220 ? f.excerpt.slice(0, 220) + '…' : f.excerpt || '(empty answer)') + '”'), f.answer_note ? h('small', null, (f.answered_name || '') + ': ' + f.answer_note) : null),
+      f.kind === 'field' ? h('button', { class: 'quiet', type: 'button', onclick: () => jump(f.section, f.field_key) }, 'Go to question') : null))) : null];
+}
+function renderFlagSlots(force) {
+  const active = document.activeElement;
+  for (const el of document.querySelectorAll('[data-flag-target]')) { if (!force && active && el.contains(active)) continue; fill(el, flagView(el.dataset.flagTarget)); }
+  for (const el of document.querySelectorAll('.flag-anchor')) el.replaceWith(flagButton(el.dataset.target) || el);
+  const ov = $('flag-overview'); if (ov) fill(ov, flagOverview());
+}
+async function pollFlags() {
+  if (document.hidden || F.busy) return;
+  try { const p = await api('/api/flags'), snap = JSON.stringify(p.flags); if (snap !== F.last) { F.last = snap; F.flags = p.flags; renderFlagSlots(); } } catch { /* next tick */ }
+}
+async function flagCall(fn) {
+  if (F.busy) return; F.busy = true; F.error = '';
+  try { await fn(); } catch (e) { F.error = errMsg(e, 'Could not save. Please try again.'); }
+  finally { F.busy = false; F.last = ''; renderFlagSlots(true); pollFlags(); }
+}
+
 /* ---------- start ---------- */
 window.addEventListener('beforeunload', e => {
   const unsentComments = Object.values(T.drafts).some(v => v.trim()) || C.uploading || Object.values(C.drafts).some(v => v.trim()) || Object.values(C.uploads).some(v => v.length);
   if (Object.keys(S.pending).length || Object.keys(S.saving).length || Object.keys(S.conflicts).length || unsentComments) { e.preventDefault(); e.returnValue = ''; }
 });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { syncPlan(); pollList(); pollThread(); pollTeam(); } });
-setInterval(() => { syncPlan(); pollList(); pollThread(); if (S.commentsOpen && S.panelView === 'team') pollTeam(); }, 2000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { pollFlags(); syncPlan(); pollList(); pollThread(); pollTeam(); } });
+let flagTick = 0;
+setInterval(() => { syncPlan(); pollList(); pollThread(); if (++flagTick % 3 === 0) pollFlags(); if (S.commentsOpen && S.panelView === 'team') pollTeam(); }, 2000);
 renderShell();
 api('/api/me').then(me => { S.me = me; tabs = me.isOwner ? allTabs : allTabs.filter(t => !ownerOnly(t[0])); renderNav(); renderMain(); renderPanel(); pollTeam(); }).catch(e => { S.error = errMsg(e, 'Could not check your sign-in.'); renderMain(); });
 load();
+pollFlags();
 })();

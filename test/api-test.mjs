@@ -129,4 +129,24 @@ ok((await call('jimmy', '/api/team/topics', J('POST', { name: 'spring carnival' 
 ok((await call('ying', '/api/team/topics', J('POST', { name: 'Owner topic' }))).s === 200, 'owner can add topic');
 ok((await call('jimmy', '/api/team?id=' + tm, { method: 'DELETE' })).s === 403, 'cannot delete others team msg');
 ok((await call('jessie', '/api/team?id=' + tm, { method: 'DELETE' })).s === 200 && (await call('ying', '/api/team')).j.messages.length === 0, 'delete own team msg');
+
+// beyond-Essentials flags
+await call('jessie', '/api/plan', J('PATCH', { section: 'events', key: 'event0Better', value: 'Parents pay by card in the app', base: (await call('jessie', '/api/plan')).j.sections.find(x => x.id === 'events')?.content.event0Better ?? '' }));
+const fid = id();
+ok((await call('jessie', '/api/flags', J('POST', { id: fid, target: 'field:events:event0Better', note: 'x' }))).s === 403, 'Lakeville cannot create flags');
+ok((await call('ying', '/api/flags', J('POST', { id: fid, target: 'field:pro:onlinepaySignal', note: 'x' }))).s === 400, 'cannot flag owner-only field');
+ok((await call('ying', '/api/flags', J('POST', { id: fid, target: 'field:events:nope', note: 'x' }))).s === 400, 'cannot flag unknown field');
+ok((await call('ying', '/api/flags', J('POST', { id: fid, target: 'field:events:event0Better', note: 'Card payments are a future upgrade.' }))).s === 200, 'owner flags a field');
+let fl = (await call('jessie', '/api/flags')).j.flags;
+ok(fl.length === 1 && fl[0].excerpt === 'Parents pay by card in the app' && fl[0].label.includes('Current events') && fl[0].answer === '' && !('created_by' in fl[0]), 'Lakeville sees flag with excerpt ' + JSON.stringify(fl[0]));
+ok((await call('ying', '/api/flags', J('POST', { id: id(), target: 'field:events:event0Better', note: 'Updated note' }))).s === 200 && (await call('ying', '/api/flags')).j.flags.length === 1, 'reflagging same target updates, no duplicate');
+ok((await call('jessie', '/api/flags', J('PATCH', { id: fid, answer: 'maybe' }))).s === 400, 'invalid answer rejected');
+ok((await call('jessie', '/api/flags', J('PATCH', { id: fid, answer: 'plan', note: 'Yes for the Car Show' }))).s === 200, 'Lakeville answers flag');
+fl = (await call('ying', '/api/flags')).j.flags;
+ok(fl[0].answer === 'plan' && fl[0].answered_name === 'Jessie' && fl[0].answer_note === 'Yes for the Car Show' && fl[0].note === 'Updated note', 'answer recorded with name ' + JSON.stringify(fl[0]));
+const tmf = id(); await call('jimmy', '/api/team', J('POST', { id: tmf, topic: 'General', body: 'Could it track vendor booths?' }));
+ok((await call('ying', '/api/flags', J('POST', { id: id(), target: 'team:' + tmf, note: '' }))).s === 200 && (await call('ying', '/api/flags')).j.flags.some(f => f.kind === 'team' && f.excerpt.includes('vendor') && f.note.includes('Essentials')), 'owner flags a team message (default note)');
+ok((await call('jessie', '/api/flags?id=' + fid, { method: 'DELETE' })).s === 403, 'Lakeville cannot remove flags');
+ok((await call('ying', '/api/flags?id=' + fid, { method: 'DELETE' })).s === 200 && (await call('ying', '/api/flags')).j.flags.length === 1, 'owner removes flag');
+ok((await call('jessie', '/api/flags', J('PATCH', { id: fid, answer: 'skip' }))).s === 404, 'answering removed flag → 404');
 console.log(`API tests: ${pass} passed, ${fail} failed`);

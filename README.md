@@ -27,6 +27,7 @@ It runs as **one Cloudflare Worker** with a D1 database. There is no framework, 
    node test/harness.mjs &          # local stand-in for Cloudflare (SQLite + fake sign-in)
    node test/api-test.mjs           # API checks
    python3 test/ui-test.py          # two-person browser checks (restart harness first for clean data)
+   python3 test/flag-ui-test.py     # "beyond Essentials" flag flow (restart harness first)
    ```
 4. Push to `main`. Cloudflare deploys it.
 

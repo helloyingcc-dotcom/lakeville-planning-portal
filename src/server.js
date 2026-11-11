@@ -37,6 +37,7 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS answer_history_field ON answer_history(section, field_key, id)`,
   `CREATE TABLE IF NOT EXISTS team_topics (name TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, created_by TEXT NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS team_messages (seq INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, id TEXT NOT NULL UNIQUE, topic TEXT NOT NULL, ref_section TEXT, ref_field TEXT, ref_label TEXT, author_id TEXT NOT NULL, author_name TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL, edited_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS scope_flags (id TEXT PRIMARY KEY NOT NULL, target TEXT NOT NULL UNIQUE, kind TEXT NOT NULL, section TEXT, field_key TEXT, label TEXT NOT NULL, excerpt TEXT NOT NULL, note TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, answer TEXT DEFAULT '' NOT NULL, answer_note TEXT, answered_by TEXT, answered_at TEXT)`,
   `INSERT OR IGNORE INTO team_topics (name,created_by,created_at) VALUES ('General','system','2026-11-11T00:00:00Z'),('Family Game Night','system','2026-11-11T00:00:01Z'),('Sweetheart Dance','system','2026-11-11T00:00:02Z'),('Car Show','system','2026-11-11T00:00:03Z'),('Literacy Night','system','2026-11-11T00:00:04Z')`,
 ];
 let schemaReady = null;
@@ -339,6 +340,51 @@ async function answerFileDelete(request, env, user) {
 
 /* ---------------- Lakeville team chat (owner reads, team writes) ---------------- */
 const TEAM_PAGE = 300, MAX_TOPICS = 40;
+/* ---------- "beyond Essentials" flags: DBY flags an ask, Lakeville says whether to plan it for a future upgrade ---------- */
+const FLAG_ANSWERS = ['', 'plan', 'skip'];
+async function flagsGet(env) {
+  const r = await env.DB.prepare(`SELECT f.*, (SELECT name FROM people WHERE email=f.answered_by) AS person_name FROM scope_flags f ORDER BY f.created_at`).all();
+  return json({ flags: r.results.map(({ created_by, answered_by, person_name, ...f }) => ({ ...f, answered_name: answered_by ? person_name || nameFromEmail(answered_by) : null })) });
+}
+async function flagsPost(request, env, user) {
+  if (!user.isOwner) return json({ error: 'Only DBY can flag items.' }, 403);
+  let p; try { p = await readJson(request, 4000); } catch { return json({ error: 'Invalid flag.' }, 400); }
+  if (!uuid(p.id) || typeof p.target !== 'string' || typeof p.note !== 'string' || p.note.length > 1000) return json({ error: 'Invalid flag.' }, 400);
+  const [kind, a, b] = p.target.split(':');
+  let section = null, key = null, label, excerpt;
+  if (kind === 'field') {
+    const f = !ownerOnly(a) && Object.hasOwn(MODEL.sections, a) ? MODEL.sections[a].find(x => x.key === b) : null;
+    if (!f) return json({ error: 'That question no longer exists.' }, 400);
+    const row = await env.DB.prepare('SELECT content FROM planning_sections WHERE id=?').bind(a).first();
+    section = a; key = b; label = (MODEL.tabs.find(t => t[0] === a)?.[1] || a) + ' › ' + f.label; excerpt = String(JSON.parse(row?.content || '{}')[b] || '');
+  } else if (kind === 'team' && uuid(a)) {
+    const m = await env.DB.prepare('SELECT body, ref_section, ref_field FROM team_messages WHERE id=?').bind(a).first();
+    if (!m) return json({ error: 'That message no longer exists.' }, 400);
+    section = m.ref_section; key = m.ref_field; label = 'Team chat'; excerpt = m.body;
+  } else if (kind === 'ask' && uuid(a)) {
+    const m = await env.DB.prepare('SELECT m.body, t.section, t.field_key FROM comment_messages m JOIN comment_threads t ON t.id=m.thread_id WHERE m.request_id=?').bind(a).first();
+    if (!m) return json({ error: 'That question no longer exists.' }, 400);
+    section = m.section === 'general' ? null : m.section; key = m.field_key; label = 'Questions for DBY'; excerpt = m.body;
+  } else return json({ error: 'Invalid flag.' }, 400);
+  const note = p.note.trim() || 'This goes beyond the School-Year Essentials plan.';
+  await env.DB.prepare(`INSERT INTO scope_flags (id,target,kind,section,field_key,label,excerpt,note,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(target) DO UPDATE SET note=excluded.note, excerpt=excluded.excerpt`).bind(p.id, p.target, kind, section, key, label, excerpt.slice(0, 600), note, user.userId, nowIso()).run();
+  return json({ ok: true });
+}
+async function flagsPatch(request, env, user) {
+  let p; try { p = await readJson(request, 3000); } catch { return json({ error: 'Invalid answer.' }, 400); }
+  if (!uuid(p.id) || !FLAG_ANSWERS.includes(p.answer) || (p.note != null && (typeof p.note !== 'string' || p.note.length > 1000))) return json({ error: 'Invalid answer.' }, 400);
+  const row = await env.DB.prepare('UPDATE scope_flags SET answer=?, answer_note=?, answered_by=?, answered_at=? WHERE id=? RETURNING id')
+    .bind(p.answer, p.answer ? (p.note || '').trim() || null : null, p.answer ? user.userId : null, p.answer ? nowIso() : null, p.id).first();
+  return row ? json({ ok: true }) : json({ error: 'That flag was removed.' }, 404);
+}
+async function flagsDelete(request, env, user) {
+  if (!user.isOwner) return json({ error: 'Only DBY can remove flags.' }, 403);
+  const id = new URL(request.url).searchParams.get('id');
+  if (!uuid(id)) return json({ error: 'Invalid flag.' }, 400);
+  await env.DB.prepare('DELETE FROM scope_flags WHERE id=?').bind(id).run();
+  return json({ ok: true });
+}
 async function teamGet(request, env, user) {
   const before = Number(new URL(request.url).searchParams.get('before') || 0);
   if (!Number.isSafeInteger(before) || before < 0) return json({ error: 'Invalid request.' }, 400);
@@ -442,6 +488,12 @@ async function handle(request, env) {
       if (method === 'POST') return await teamPost(request, env, user);
       if (method === 'PATCH') return await teamPatch(request, env, user);
       if (method === 'DELETE') return await teamDelete(request, env, user);
+    }
+    if (path === '/api/flags') {
+      if (method === 'GET') return await flagsGet(env);
+      if (method === 'POST') return await flagsPost(request, env, user);
+      if (method === 'PATCH') return await flagsPatch(request, env, user);
+      if (method === 'DELETE') return await flagsDelete(request, env, user);
     }
     if (path === '/api/team/topics' && method === 'POST') return await teamTopicPost(request, env, user);
     if (path === '/api/answer-files') {
