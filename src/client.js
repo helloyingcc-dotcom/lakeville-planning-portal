@@ -7,13 +7,13 @@ let tabs = allTabs.filter(t => !ownerOnly(t[0]));
 const descriptions = {start:'A shared starting point for Lakeville and DBY.',events:'Tell us how Lakeville runs events today. Start with one or two you know well.',features:'See what’s included in your plan and what’s available as an upgrade.',preview:'Explore one possible direction, then tell us what fits Lakeville.',workflow:'Walk us through a real event and decide who needs access.',questions:'Help us shape the first version and understand the accounting needs.',pro:'Only you can see this page. Sort what Lakeville asks for into the higher tier as their answers come in.'};
 
 /* ---------- tiny DOM helpers ---------- */
+const LION_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" aria-hidden="true"><g fill="#e2a634"><circle cx="12.00" cy="5.00" r="3.3"/><circle cx="15.95" cy="6.16" r="3.3"/><circle cx="18.64" cy="9.27" r="3.3"/><circle cx="19.23" cy="13.34" r="3.3"/><circle cx="17.52" cy="17.08" r="3.3"/><circle cx="14.06" cy="19.30" r="3.3"/><circle cx="9.94" cy="19.30" r="3.3"/><circle cx="6.48" cy="17.08" r="3.3"/><circle cx="4.77" cy="13.34" r="3.3"/><circle cx="5.36" cy="9.27" r="3.3"/><circle cx="8.05" cy="6.16" r="3.3"/><circle cx="12" cy="12.3" r="7.4"/></g><g fill="#f6d58f"><circle cx="8.1" cy="7.9" r="1.7"/><circle cx="15.9" cy="7.9" r="1.7"/><circle cx="12" cy="12.6" r="5.6"/></g><g fill="#1c2a4b"><circle cx="8.1" cy="7.9" r=".7"/><circle cx="15.9" cy="7.9" r=".7"/></g><ellipse cx="12" cy="14.6" rx="2.7" ry="2" fill="#fbe8c2"/><g fill="#1c2a4b"><circle cx="9.9" cy="11.7" r=".8"/><circle cx="14.1" cy="11.7" r=".8"/><path d="M10.8 13.3h2.4l-1.2 1.3z"/></g><path d="M12 14.6v.8M10.8 15.9c.7.5 1.7.5 2.4 0" fill="none" stroke="#1c2a4b" stroke-width=".7" stroke-linecap="round"/></svg>';
 const ICONS = {
   message:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   check:'<path d="M20 6 9 17l-5-5"/>',
   save:'<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/>',
   refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
-  leaf:'<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>',
   book:'<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
   right:'<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
   left:'<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
@@ -85,7 +85,7 @@ const root = $('app');
 function renderShell() {
   fill(root, h('div', { class: 'portal' },
     h('aside', { class: 'sidebar' },
-      h('a', { href: '/', class: 'brand' }, h('span', { class: 'brandmark' }, icon('leaf', 22)), h('span', null, 'Lakeville PTA', h('small', null, 'EVENTS APP PLANNING'))),
+      h('a', { href: '/', class: 'brand' }, h('span', { class: 'brandmark', ref: el => { el.innerHTML = LION_SVG; } }), h('span', null, 'Lakeville PTA', h('small', null, 'EVENTS APP PLANNING'))),
       h('div', { class: 'navlabel' }, 'LET’S SHAPE IT TOGETHER'),
       h('nav', { 'aria-label': 'Planning sections', id: 'nav' }),
       h('div', { class: 'sidebottom' }, icon('book', 18), h('p', null, 'From ideas to a first concept.', h('br'), h('small', null, 'Then a call and agreed scope.')))),
