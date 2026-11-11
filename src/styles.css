@@ -184,3 +184,10 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .flag-status{font-size:11px;font-weight:700;border-radius:20px;padding:3px 9px;white-space:nowrap}
 .flag-status.plan{background:#e6ecfa;color:#1c2a4b}.flag-status.skip{background:#eceef2;color:#5b6170}.flag-status.waiting{background:#fff1d6;color:#8a5a00}
 @media(max-width:640px){.flag-list li{grid-template-columns:1fr}}
+.scope-flag.suggested{background:#f5f3ff;border-color:#ddd6fe;border-left-color:#7c6fd6;border-style:dashed}
+.scope-flag.suggested strong,.scope-flag.suggested label{color:#4c3f9e}
+.flag-why{color:#5b5b7a;font-size:12px}
+.flag-status.suggested{background:#ede9fe;color:#4c3f9e}
+.flag-list li.sugg{background:#faf9ff}
+.flag-list li small{display:block;color:#5b6170;margin-top:3px}
+.sugg-head{font-size:14px;margin:14px 0 2px;color:#1c2a4b}

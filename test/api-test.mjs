@@ -149,4 +149,28 @@ ok((await call('ying', '/api/flags', J('POST', { id: id(), target: 'team:' + tmf
 ok((await call('jessie', '/api/flags?id=' + fid, { method: 'DELETE' })).s === 403, 'Lakeville cannot remove flags');
 ok((await call('ying', '/api/flags?id=' + fid, { method: 'DELETE' })).s === 200 && (await call('ying', '/api/flags')).j.flags.length === 1, 'owner removes flag');
 ok((await call('jessie', '/api/flags', J('PATCH', { id: fid, answer: 'skip' }))).s === 404, 'answering removed flag → 404');
+
+// AI-suggested flags (owner-only until approved)
+await call('jimmy', '/api/plan', J('PATCH', { section: 'events', key: 'event1Better', value: 'Volunteers sign up for shifts in the app', base: (await call('jimmy', '/api/plan')).j.sections.find(x => x.id === 'events')?.content.event1Better ?? '' }));
+const sid = id();
+ok((await call('jessie', '/api/flags', J('POST', { id: sid, target: 'field:events:event1Better', note: 'x', suggested: true }))).s === 403, 'Lakeville cannot suggest');
+let sr = await call('ying', '/api/flags', J('POST', { id: sid, target: 'field:events:event1Better', note: 'Volunteer shift sign-ups are a future upgrade.', why: 'Shift sign-ups are a Pro feature', suggested: true }));
+ok(sr.j.created === true && sr.j.status === 'suggested', 'AI suggestion created');
+ok(!(await call('jessie', '/api/flags')).j.flags.some(f => f.id === sid), 'suggestion hidden from Lakeville');
+const yf = (await call('ying', '/api/flags')).j.flags.find(f => f.id === sid);
+ok(yf?.status === 'suggested' && yf.why.includes('Pro') && yf.source === 'ai', 'owner sees suggestion with why');
+ok(!('why' in ((await call('jessie', '/api/flags')).j.flags[0] || {})), 'why/source hidden from Lakeville');
+ok((await call('jessie', '/api/flags', J('PATCH', { id: sid, answer: 'plan' }))).s === 404, 'Lakeville cannot answer a suggestion');
+ok((await call('jessie', '/api/flags', J('PATCH', { id: sid, status: 'live' }))).s === 403, 'Lakeville cannot approve');
+ok((await call('ying', '/api/flags', J('POST', { id: id(), target: 'field:events:event1Better', note: 'dup', suggested: true }))).j.created === false, 'repeat suggestion is ignored');
+ok((await call('ying', '/api/flags', J('PATCH', { id: sid, status: 'live', note: 'Edited: shift sign-ups would be a future upgrade.' }))).s === 200, 'owner approves with edited note');
+let jf = (await call('jessie', '/api/flags')).j.flags.find(f => f.id === sid);
+ok(jf?.status === 'live' && jf.note.startsWith('Edited'), 'approved flag visible to Lakeville with edited note');
+ok((await call('jessie', '/api/flags', J('PATCH', { id: sid, answer: 'skip' }))).s === 200, 'Lakeville answers approved flag');
+const did2 = id(); await call('ying', '/api/flags', J('POST', { id: did2, target: 'team:' + tmf, note: 'n', suggested: true }));
+const tmf2 = id(); await call('jimmy', '/api/team', J('POST', { id: tmf2, topic: 'General', body: 'Could families pay by card?' }));
+const d2 = id(); await call('ying', '/api/flags', J('POST', { id: d2, target: 'team:' + tmf2, note: 'n', suggested: true }));
+ok((await call('ying', '/api/flags', J('PATCH', { id: d2, status: 'dismissed' }))).s === 200 && !(await call('ying', '/api/flags')).j.flags.some(f => f.id === d2), 'dismissed suggestion hidden');
+ok((await call('ying', '/api/flags', J('POST', { id: id(), target: 'team:' + tmf2, note: 'n', suggested: true }))).j.created === false, 'dismissed item not re-suggested');
+ok((await call('ying', '/api/flags?all=1')).j.flags.some(f => f.id === d2 && f.status === 'dismissed') && !(await call('jessie', '/api/flags?all=1')).j.flags.some(f => f.id === d2), 'all=1 shows dismissed to owner only');
 console.log(`API tests: ${pass} passed, ${fail} failed`);

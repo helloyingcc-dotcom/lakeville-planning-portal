@@ -28,6 +28,7 @@ It runs as **one Cloudflare Worker** with a D1 database. There is no framework, 
    node test/api-test.mjs           # API checks
    python3 test/ui-test.py          # two-person browser checks (restart harness first for clean data)
    python3 test/flag-ui-test.py     # "beyond Essentials" flag flow (restart harness first)
+   python3 test/suggest-ui-test.py  # AI-suggested flags: owner-only until approved (restart harness first)
    ```
 4. Push to `main`. Cloudflare deploys it.
 

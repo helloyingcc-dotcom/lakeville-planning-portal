@@ -838,18 +838,32 @@ const ANSWER_TEXT = { plan: 'Yes, plan it for a future upgrade', skip: 'No, not 
 function flagButton(target) {
   if (!S.me?.isOwner) return null;
   const f = flagOf(target);
-  return h('button', { class: 'comment-anchor flag-anchor' + (f ? ' on' : ''), type: 'button', 'data-target': target, title: 'Flag as beyond the Essentials plan (only you can flag)', onclick: () => { F.composing = F.composing === target ? null : target; F.drafts[target] ??= f?.note || 'This goes beyond the School-Year Essentials plan.'; F.error = ''; renderFlagSlots(true); setTimeout(() => $(flagDomId(target) + '-note')?.focus(), 0); } }, '⚑ ', f ? 'Flagged' : 'Beyond Essentials?');
+  return h('button', { class: 'comment-anchor flag-anchor' + (f ? ' on' : ''), type: 'button', 'data-target': target, title: 'Flag as beyond the Essentials plan (only you can flag)', onclick: () => { F.composing = F.composing === target ? null : target; F.drafts[target] ??= f?.note || 'This goes beyond the School-Year Essentials plan.'; F.error = ''; renderFlagSlots(true); setTimeout(() => $(flagDomId(target) + '-note')?.focus(), 0); } }, '⚑ ', f?.status === 'suggested' ? 'AI suggests' : f ? 'Flagged' : 'Beyond Essentials?');
 }
 function flagSlot(target) { return h('div', { class: 'flag-slot', 'data-flag-target': target }, flagView(target)); }
 function flagView(target) {
   const f = flagOf(target), did = flagDomId(target), owner = S.me?.isOwner;
-  const err = F.error && (F.composing === target || F.answering === f?.id) ? h('div', { class: 'comment-error', role: 'alert' }, F.error) : null;
+  const err = F.error && (F.composing === target || F.answering === f?.id || f?.status === 'suggested') ? h('div', { class: 'comment-error', role: 'alert' }, F.error) : null;
   if (owner && F.composing === target) return h('form', { class: 'scope-flag composing', onsubmit: e => { e.preventDefault(); flagCall(async () => { await api('/api/flags', jsonOpts('POST', { id: f?.id || crypto.randomUUID(), target, note: F.drafts[target] || '' })); F.composing = null; delete F.drafts[target]; }); } },
     h('label', { for: did + '-note' }, '⚑ Note to Lakeville (they’ll see this)'),
     h('textarea', { id: did + '-note', rows: 2, maxlength: 1000, value: F.drafts[target] || '', oninput: e => { F.drafts[target] = e.target.value; } }),
     err,
     h('div', { class: 'flag-actions' }, h('button', { class: 'primary', type: 'submit', disabled: F.busy }, f ? 'Save note' : 'Flag as beyond Essentials'), h('button', { class: 'quiet', type: 'button', onclick: () => { F.composing = null; renderFlagSlots(true); } }, 'Cancel')));
   if (!f) return null;
+  if (f.status === 'suggested') {
+    if (!owner) return null;
+    const skey = 'sug:' + f.id; F.drafts[skey] ??= f.note;
+    const setStatus = status => flagCall(async () => { await api('/api/flags', jsonOpts('PATCH', { id: f.id, status, note: status === 'live' ? (F.drafts[skey] || '').trim() || f.note : undefined })); delete F.drafts[skey]; });
+    return h('div', { class: 'scope-flag suggested' },
+      h('strong', null, '🤖 AI suggestion: Lakeville can’t see this yet'),
+      f.why ? h('p', { class: 'flag-why' }, 'Why: ' + f.why) : null,
+      h('label', { for: did + '-sug' }, 'Note Lakeville will see if you approve'),
+      h('textarea', { id: did + '-sug', rows: 2, maxlength: 1000, value: F.drafts[skey], oninput: e => { F.drafts[skey] = e.target.value; } }),
+      err,
+      h('div', { class: 'flag-actions' },
+        h('button', { class: 'primary', type: 'button', disabled: F.busy, onclick: () => setStatus('live') }, 'Approve & show Lakeville'),
+        h('button', { class: 'quiet', type: 'button', disabled: F.busy, onclick: () => setStatus('dismissed') }, 'Dismiss')));
+  }
   const asking = !f.answer || F.answering === f.id, nkey = 'ans:' + f.id;
   const answer = a => flagCall(async () => { await api('/api/flags', jsonOpts('PATCH', { id: f.id, answer: a, note: F.drafts[nkey] || '' })); F.answering = null; delete F.drafts[nkey]; });
   return h('div', { class: 'scope-flag' + (f.answer ? ' answered ' + f.answer : '') },
@@ -871,9 +885,20 @@ function flagView(target) {
       h('button', { class: 'quiet', type: 'button', disabled: F.busy, onclick: () => flagCall(async () => { await api('/api/flags?id=' + f.id, { method: 'DELETE' }); F.flags = F.flags.filter(x => x.id !== f.id); }) }, 'Remove flag')) : null);
 }
 function flagOverview() {
-  const list = F.flags, count = a => list.filter(f => f.answer === a).length;
+  const sugg = F.flags.filter(f => f.status === 'suggested'), list = F.flags.filter(f => f.status !== 'suggested'), count = a => list.filter(f => f.answer === a).length;
   const where = f => f.kind === 'field' ? f.label : f.label + (f.section ? ' (' + (allTabs.find(t => t[0] === f.section)?.[1] || f.section) + ')' : '');
-  return [h('h2', null, 'Flagged beyond Essentials'),
+  const sugView = sugg.length ? [h('h3', { class: 'sugg-head' }, '🤖 AI suggestions waiting for you (' + sugg.length + ')'),
+    h('p', { class: 'muted' }, 'Lakeville can’t see these until you approve them. Edit the note under each question, or approve here.'),
+    h('ul', { class: 'flag-list' }, sugg.map(f => h('li', { class: 'sugg' },
+      h('span', { class: 'flag-status suggested' }, 'Suggested'),
+      h('div', null, h('strong', null, where(f)), h('p', null, '“' + (f.excerpt.length > 220 ? f.excerpt.slice(0, 220) + '…' : f.excerpt) + '”'), f.why ? h('small', null, 'Why: ' + f.why) : null, h('small', null, 'Note to Lakeville: ' + f.note)),
+      h('div', { class: 'flag-actions' },
+        h('button', { class: 'primary', type: 'button', disabled: F.busy, onclick: () => flagCall(() => api('/api/flags', jsonOpts('PATCH', { id: f.id, status: 'live' }))) }, 'Approve'),
+        h('button', { class: 'quiet', type: 'button', disabled: F.busy, onclick: () => flagCall(() => api('/api/flags', jsonOpts('PATCH', { id: f.id, status: 'dismissed' }))) }, 'Dismiss'),
+        f.kind === 'field' ? h('button', { class: 'quiet', type: 'button', onclick: () => jump(f.section, f.field_key) }, 'Go to question') : null)))),
+    F.error ? h('div', { class: 'comment-error', role: 'alert' }, F.error) : null] : null;
+  return [h('h2', null, 'Flagged beyond Essentials'), sugView,
+    sugg.length ? h('h3', { class: 'sugg-head' }, 'Shown to Lakeville') : null,
     h('p', { class: 'muted' }, list.length ? `${list.length} flagged · ${count('plan')} want it planned · ${count('skip')} not needed · ${count('')} waiting for Lakeville` : 'Nothing flagged yet. Use ⚑ Beyond Essentials? next to any answer, team message or question to ask Lakeville.'),
     list.length ? h('ul', { class: 'flag-list' }, list.map(f => h('li', null,
       h('span', { class: 'flag-status ' + (f.answer || 'waiting') }, f.answer === 'plan' ? 'Plan it' : f.answer === 'skip' ? 'Not needed' : 'Waiting'),

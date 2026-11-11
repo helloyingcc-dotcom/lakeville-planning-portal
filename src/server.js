@@ -42,7 +42,7 @@ const SCHEMA = [
 ];
 let schemaReady = null;
 // Columns added after launch: ALTER fails harmlessly once the column exists.
-const ADDED_COLUMNS = ['ALTER TABLE planning_sections ADD COLUMN field_by TEXT'];
+const ADDED_COLUMNS = ['ALTER TABLE planning_sections ADD COLUMN field_by TEXT', "ALTER TABLE scope_flags ADD COLUMN status TEXT DEFAULT 'live' NOT NULL", 'ALTER TABLE scope_flags ADD COLUMN why TEXT', 'ALTER TABLE scope_flags ADD COLUMN source TEXT'];
 function ensureSchema(db) {
   if (!schemaReady) schemaReady = db.batch(SCHEMA.map(s => db.prepare(s)))
     .then(() => Promise.all(ADDED_COLUMNS.map(sql => db.prepare(sql).run().catch(() => null))))
@@ -342,14 +342,16 @@ async function answerFileDelete(request, env, user) {
 const TEAM_PAGE = 300, MAX_TOPICS = 40;
 /* ---------- "beyond Essentials" flags: DBY flags an ask, Lakeville says whether to plan it for a future upgrade ---------- */
 const FLAG_ANSWERS = ['', 'plan', 'skip'];
-async function flagsGet(env) {
-  const r = await env.DB.prepare(`SELECT f.*, (SELECT name FROM people WHERE email=f.answered_by) AS person_name FROM scope_flags f ORDER BY f.created_at`).all();
-  return json({ flags: r.results.map(({ created_by, answered_by, person_name, ...f }) => ({ ...f, answered_name: answered_by ? person_name || nameFromEmail(answered_by) : null })) });
+async function flagsGet(request, env, user) {
+  const all = user.isOwner && new URL(request.url).searchParams.get('all') === '1';
+  const r = await env.DB.prepare(`SELECT f.*, (SELECT name FROM people WHERE email=f.answered_by) AS person_name FROM scope_flags f WHERE f.status='live' OR (?1 AND f.status='suggested') OR ?2 ORDER BY f.created_at`).bind(user.isOwner ? 1 : 0, all ? 1 : 0).all();
+  return json({ flags: r.results.map(({ created_by, answered_by, person_name, why, source, ...f }) => ({ ...f, ...(user.isOwner ? { why, source } : {}), answered_name: answered_by ? person_name || nameFromEmail(answered_by) : null })) });
 }
 async function flagsPost(request, env, user) {
   if (!user.isOwner) return json({ error: 'Only DBY can flag items.' }, 403);
   let p; try { p = await readJson(request, 4000); } catch { return json({ error: 'Invalid flag.' }, 400); }
-  if (!uuid(p.id) || typeof p.target !== 'string' || typeof p.note !== 'string' || p.note.length > 1000) return json({ error: 'Invalid flag.' }, 400);
+  if (!uuid(p.id) || typeof p.target !== 'string' || typeof p.note !== 'string' || p.note.length > 1000 || (p.why != null && (typeof p.why !== 'string' || p.why.length > 1000))) return json({ error: 'Invalid flag.' }, 400);
+  const suggested = p.suggested === true;
   const [kind, a, b] = p.target.split(':');
   let section = null, key = null, label, excerpt;
   if (kind === 'field') {
@@ -367,14 +369,22 @@ async function flagsPost(request, env, user) {
     section = m.section === 'general' ? null : m.section; key = m.field_key; label = 'Questions for DBY'; excerpt = m.body;
   } else return json({ error: 'Invalid flag.' }, 400);
   const note = p.note.trim() || 'This goes beyond the School-Year Essentials plan.';
-  await env.DB.prepare(`INSERT INTO scope_flags (id,target,kind,section,field_key,label,excerpt,note,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(target) DO UPDATE SET note=excluded.note, excerpt=excluded.excerpt`).bind(p.id, p.target, kind, section, key, label, excerpt.slice(0, 600), note, user.userId, nowIso()).run();
-  return json({ ok: true });
+  // An AI suggestion never overrides an existing flag, suggestion or dismissal on the same item.
+  const r = await env.DB.prepare(`INSERT INTO scope_flags (id,target,kind,section,field_key,label,excerpt,note,created_by,created_at,status,why,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(target) DO ${suggested ? 'NOTHING' : "UPDATE SET note=excluded.note, excerpt=excluded.excerpt, status='live'"} RETURNING id`)
+    .bind(p.id, p.target, kind, section, key, label, excerpt.slice(0, 600), note, user.userId, nowIso(), suggested ? 'suggested' : 'live', p.why?.trim() || null, suggested ? 'ai' : 'dby').first();
+  return json({ ok: true, created: !!r, status: suggested ? (r ? 'suggested' : 'exists') : 'live' });
 }
 async function flagsPatch(request, env, user) {
   let p; try { p = await readJson(request, 3000); } catch { return json({ error: 'Invalid answer.' }, 400); }
+  if (p.status != null) {
+    if (!user.isOwner) return json({ error: 'Only DBY can approve flags.' }, 403);
+    if (!uuid(p.id) || !['live', 'dismissed'].includes(p.status) || (p.note != null && (typeof p.note !== 'string' || !p.note.trim() || p.note.length > 1000))) return json({ error: 'Invalid update.' }, 400);
+    const row = await env.DB.prepare('UPDATE scope_flags SET status=?, note=COALESCE(?, note), created_at=CASE WHEN status=\'suggested\' AND ?=\'live\' THEN ? ELSE created_at END WHERE id=? RETURNING id').bind(p.status, p.note?.trim() || null, p.status, nowIso(), p.id).first();
+    return row ? json({ ok: true }) : json({ error: 'That flag was removed.' }, 404);
+  }
   if (!uuid(p.id) || !FLAG_ANSWERS.includes(p.answer) || (p.note != null && (typeof p.note !== 'string' || p.note.length > 1000))) return json({ error: 'Invalid answer.' }, 400);
-  const row = await env.DB.prepare('UPDATE scope_flags SET answer=?, answer_note=?, answered_by=?, answered_at=? WHERE id=? RETURNING id')
+  const row = await env.DB.prepare("UPDATE scope_flags SET answer=?, answer_note=?, answered_by=?, answered_at=? WHERE id=? AND status='live' RETURNING id")
     .bind(p.answer, p.answer ? (p.note || '').trim() || null : null, p.answer ? user.userId : null, p.answer ? nowIso() : null, p.id).first();
   return row ? json({ ok: true }) : json({ error: 'That flag was removed.' }, 404);
 }
@@ -490,7 +500,7 @@ async function handle(request, env) {
       if (method === 'DELETE') return await teamDelete(request, env, user);
     }
     if (path === '/api/flags') {
-      if (method === 'GET') return await flagsGet(env);
+      if (method === 'GET') return await flagsGet(request, env, user);
       if (method === 'POST') return await flagsPost(request, env, user);
       if (method === 'PATCH') return await flagsPatch(request, env, user);
       if (method === 'DELETE') return await flagsDelete(request, env, user);
