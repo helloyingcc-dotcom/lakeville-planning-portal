@@ -74,7 +74,8 @@ const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'applic
 /* ---------- state ---------- */
 const S = { panelView: 'team', tab: 'start', data: {}, records: {}, files: [], fileBusy: {}, fileError: {}, dirty: {}, loaded: false, busy: false, error: '', notice: '', incoming: [], me: null, nameEditing: false, nameBusy: false, nameError: '', commentsOpen: window.innerWidth > 1100, counts: [] };
 const C = { scope: 'current', threads: [], active: null, messages: [], drafts: {}, uploads: {}, error: '', connected: false, busy: false, uploading: false, showResolved: false, composing: false, newAnchor: null, nextThreads: null, nextMessages: null, me: null, editing: null, editText: '', confirmDelete: null, outgoing: null, scrollAtEnd: true, listKey: '', lastList: '', lastThread: '', gen: 0 };
-const T = { messages: [], topics: ['General'], filter: 'All', topic: 'General', drafts: {}, ref: null, me: null, readOnly: false, editing: null, editText: '', confirmDelete: null, busy: false, error: '', last: '', newTopic: null, nextBefore: null, scrollAtEnd: true, loaded: false };
+const postTopic = () => T.filter === 'All' ? (T.topics.includes('General') ? 'General' : T.topics[0]) : T.filter;
+const T = { messages: [], topics: ['General'], filter: 'All', drafts: {}, ref: null, me: null, readOnly: false, editing: null, editText: '', confirmDelete: null, busy: false, error: '', last: '', newTopic: null, nextBefore: null, scrollAtEnd: true, loaded: false };
 const current = () => S.data[S.tab] || {};
 const fieldId = (tab, key) => 'answer-' + tab + '-' + key;
 const titleFor = tab => tab === 'start' ? 'Let’s build the right starting point.' : tabs.find(t => t[0] === tab)?.[1] || '';
@@ -642,7 +643,7 @@ async function pollTeam() {
   try {
     const p = await api('/api/team');
     T.me = p.me; T.readOnly = !!p.readOnly; T.loaded = true; C.connected = true;
-    if (!p.topics.includes(T.topic)) T.topic = p.topics[0] || 'General';
+    if (T.filter !== 'All' && !p.topics.includes(T.filter)) T.filter = 'All';
     const snap = JSON.stringify([p.messages, p.topics]);
     if (snap !== T.last) {
       T.last = snap;
@@ -664,18 +665,18 @@ async function teamCall(fn, fallback) {
 }
 function sendTeam(e) {
   e.preventDefault();
-  const body = (T.drafts[T.topic] || '').trim();
+  const topic = postTopic(), body = (T.drafts[topic] || '').trim();
   if (!body) return;
   const id = crypto.randomUUID(), ref = T.ref;
   teamCall(async () => {
-    await api('/api/team', jsonOpts('POST', { id, topic: T.topic, body, ref: ref ? { section: ref.section, field: ref.field } : null }));
-    T.drafts[T.topic] = ''; T.ref = null; T.scrollAtEnd = true;
+    await api('/api/team', jsonOpts('POST', { id, topic, body, ref: ref ? { section: ref.section, field: ref.field } : null }));
+    T.drafts[topic] = ''; T.ref = null; T.scrollAtEnd = true;
   }, 'Message not sent. Please try again.');
 }
 function addTopic(e) {
   e.preventDefault();
   const name = (T.newTopic || '').trim(); if (!name) return;
-  teamCall(async () => { const p = await api('/api/team/topics', jsonOpts('POST', { name })); T.topic = p.name; T.filter = 'All'; T.newTopic = null; }, 'Could not add the topic.');
+  teamCall(async () => { const p = await api('/api/team/topics', jsonOpts('POST', { name })); if (!T.topics.includes(p.name)) T.topics = [...T.topics, p.name]; T.filter = p.name; T.newTopic = null; }, 'Could not add the topic.');
 }
 function teamMessageView(m) {
   const mine = T.me && m.author_id === T.me, editing = T.editing === m.id, confirming = T.confirmDelete === m.id;
@@ -708,7 +709,7 @@ function renderTeam(panel) {
     h('div', { class: 'team-note' }, S.me?.isOwner ? 'Lakeville’s team space. You can read everything and post as DBY; your messages show your name.' : 'Your Lakeville team space: talk it through here, then put the final answer in the question. DBY can read along.'),
     T.error ? h('div', { role: 'alert', class: 'comment-error' }, T.error) : null,
     h('div', { class: 'comments-filters team-filters' },
-      h('label', null, 'Show', topicSelect('teamFilter', T.filter, e => { T.filter = e.target.value; if (T.filter !== 'All') T.topic = T.filter; T.scrollAtEnd = true; renderPanel(); }, true)),
+      h('label', null, 'Topic', topicSelect('teamFilter', T.filter, e => { T.filter = e.target.value; T.scrollAtEnd = true; renderPanel(); }, true)),
       T.readOnly ? null : (T.newTopic == null
         ? h('button', { class: 'quiet', type: 'button', onclick: () => { T.newTopic = ''; renderPanel(); setTimeout(() => $('newTopic')?.focus(), 0); } }, icon('plus', 13), 'New topic')
         : h('form', { class: 'new-topic', onsubmit: addTopic }, h('input', { id: 'newTopic', maxlength: 40, placeholder: 'e.g. Spring Carnival', value: T.newTopic, oninput: e => { T.newTopic = e.target.value; } }),
@@ -719,11 +720,10 @@ function renderTeam(panel) {
       shown.map(teamMessageView)),
     T.readOnly ? null : h('form', { class: 'comment-compose team-compose', onsubmit: sendTeam },
       T.ref ? h('div', { class: 'team-ref' }, h('span', null, 'Re: ' + T.ref.label), h('button', { class: 'quiet iconbutton', type: 'button', 'aria-label': 'Remove question link', onclick: () => { T.ref = null; renderPanel(); } }, icon('x', 13))) : null,
-      h('label', { class: 'team-topic' }, 'Topic', topicSelect('teamTopic', T.topic, e => { T.topic = e.target.value; renderPanel(); }, false)),
       h('label', { class: 'sr-only', for: 'team-message' }, 'Message to the Lakeville team'),
-      h('textarea', { id: 'team-message', value: T.drafts[T.topic] || '', disabled: T.busy, maxlength: 4000, rows: 3, placeholder: 'Message the Lakeville team…', oninput: e => { T.drafts[T.topic] = e.target.value; const b = $('teamSend'); if (b) b.disabled = T.busy || !e.target.value.trim(); } }),
-      h('div', null, h('small', null, 'Visible to the Lakeville team and DBY'),
-        h('button', { class: 'primary', id: 'teamSend', type: 'submit', disabled: T.busy || !(T.drafts[T.topic] || '').trim() }, icon('send', 14), T.busy ? 'Sending…' : 'Send'))));
+      h('textarea', { id: 'team-message', value: T.drafts[postTopic()] || '', disabled: T.busy, maxlength: 4000, rows: 3, placeholder: 'Message the Lakeville team…', oninput: e => { T.drafts[postTopic()] = e.target.value; const b = $('teamSend'); if (b) b.disabled = T.busy || !e.target.value.trim(); } }),
+      h('div', null, h('small', null, 'Posting in: ', h('strong', { id: 'postingIn' }, postTopic()), ' · seen by the Lakeville team and DBY'),
+        h('button', { class: 'primary', id: 'teamSend', type: 'submit', disabled: T.busy || !(T.drafts[postTopic()] || '').trim() }, icon('send', 14), T.busy ? 'Sending…' : 'Send'))));
   renderPanelHeader();
   const feed = panel.querySelector('.message-feed'); if (feed) feed.scrollTop = T.scrollAtEnd ? feed.scrollHeight : feedScroll;
   if (focusId) { const el = $(focusId); if (el && !el.disabled) { el.focus({ preventScroll: true }); if (caret && 'selectionStart' in el) try { el.setSelectionRange(caret[0], caret[1]); } catch { /* not text */ } } }
