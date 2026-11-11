@@ -191,3 +191,8 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .flag-list li.sugg{background:#faf9ff}
 .flag-list li small{display:block;color:#5b6170;margin-top:3px}
 .sugg-head{font-size:14px;margin:14px 0 2px;color:#1c2a4b}
+.ahead-intro{background:#f5f7fc;border:1px solid #d9e0ee;border-radius:14px;padding:18px 20px;margin-bottom:14px}
+.ahead-intro h2{margin:4px 0 6px;color:#1c2a4b}
+.ahead-intro p{margin:0;line-height:1.5}
+.tier-badge.ahead{background:#fff4dc;color:#7a4f00}
+.ahead-says{font-size:12px;background:#f5f7fc;border-radius:8px;padding:6px 9px;color:#1c2a4b}
