@@ -127,7 +127,7 @@ function field(f) {
   return h('div', { class: 'field' },
     h('div', { class: 'field-heading' }, h('label', { for: id }, f.label),
       ownerOnly(tab) ? null : h('span', { class: 'anchor-group' },
-        S.me && !S.me.isOwner ? h('button', { class: 'comment-anchor team-anchor', type: 'button', 'aria-label': 'Discuss with the Lakeville team: ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => openTeam({ section: tab, field: f.key, label: titleFor(tab) + ' › ' + (sections[tab].find(x => x.key === f.key)?.label || f.label) }) }, icon('users', 13), 'Discuss with team') : null,
+        S.me ? h('button', { class: 'comment-anchor team-anchor', type: 'button', 'aria-label': 'Discuss with the Lakeville team: ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => openTeam({ section: tab, field: f.key, label: titleFor(tab) + ' › ' + (sections[tab].find(x => x.key === f.key)?.label || f.label) }) }, icon('users', 13), 'Discuss with team') : null,
         h('button', { class: 'comment-anchor', type: 'button', 'data-anchor': f.key, 'aria-label': 'Ask DBY about ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => comment(f) }, icon('message', 13), count ? String(count) : 'Ask DBY'))),
     f.hint ? h('small', null, f.hint) : null, control,
     f.options || ownerOnly(tab) ? null : h('div', { class: 'answer-files', id: 'files-' + fieldId(tab, f.key) }, fileArea(tab, f.key)));
@@ -705,7 +705,7 @@ function renderTeam(panel) {
   const topicSelect = (id, value, onchange, withAll) => { const sel = h('select', { id, onchange }, withAll ? h('option', { value: 'All' }, 'All topics') : null, T.topics.map(t => h('option', { value: t }, t))); sel.value = value; return sel; };
   fill(panel,
     panelHeader(),
-    h('div', { class: 'team-note' }, T.readOnly ? 'Lakeville’s own space. You’re reading along as DBY (read-only).' : 'Your Lakeville team space: talk it through here, then put the final answer in the question. DBY can read along.'),
+    h('div', { class: 'team-note' }, S.me?.isOwner ? 'Lakeville’s team space. You can read everything and post as DBY; your messages show your name.' : 'Your Lakeville team space: talk it through here, then put the final answer in the question. DBY can read along.'),
     T.error ? h('div', { role: 'alert', class: 'comment-error' }, T.error) : null,
     h('div', { class: 'comments-filters team-filters' },
       h('label', null, 'Show', topicSelect('teamFilter', T.filter, e => { T.filter = e.target.value; if (T.filter !== 'All') T.topic = T.filter; T.scrollAtEnd = true; renderPanel(); }, true)),

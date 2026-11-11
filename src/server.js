@@ -297,10 +297,9 @@ async function teamGet(request, env, user) {
   const rows = await env.DB.prepare(`SELECT * FROM (SELECT m.seq,m.id,m.topic,m.ref_section,m.ref_field,m.ref_label,m.author_id,${NAME('m', 'author_id', 'author_name')} AS author_name,m.body,m.created_at,m.edited_at FROM team_messages m WHERE (?=0 OR m.seq<?) ORDER BY m.seq DESC LIMIT ${TEAM_PAGE + 1}) ORDER BY seq`).bind(before, before).all();
   const more = rows.results.length > TEAM_PAGE, messages = more ? rows.results.slice(1) : rows.results;
   const topics = await env.DB.prepare('SELECT name FROM team_topics ORDER BY created_at').all();
-  return json({ messages, topics: topics.results.map(t => t.name), me: user.userId, readOnly: user.isOwner, nextBefore: more ? messages[0].seq : null });
+  return json({ messages, topics: topics.results.map(t => t.name), me: user.userId, readOnly: false, isOwner: user.isOwner, nextBefore: more ? messages[0].seq : null });
 }
 async function teamPost(request, env, user) {
-  if (user.isOwner) return json({ error: 'The team chat is read-only for DBY. Use Questions for DBY to reply.' }, 403);
   let p; try { p = await readJson(request); } catch { return json({ error: 'Invalid message.' }, 400); }
   if (!uuid(p.id) || typeof p.body !== 'string' || !p.body.trim() || p.body.length > 4000 || typeof p.topic !== 'string') return json({ error: 'Write a message (up to 4,000 characters).' }, 400);
   const topic = await env.DB.prepare('SELECT name FROM team_topics WHERE name=?').bind(p.topic).first('name');
@@ -330,7 +329,6 @@ async function teamDelete(request, env, user) {
   return json({ ok: true });
 }
 async function teamTopicPost(request, env, user) {
-  if (user.isOwner) return json({ error: 'The team chat is read-only for DBY.' }, 403);
   let p; try { p = await readJson(request, 2000); } catch { return json({ error: 'Invalid topic.' }, 400); }
   const name = typeof p.name === 'string' ? p.name.replace(/[\x00-\x1f\x7f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40) : '';
   if (!name) return json({ error: 'Name the topic, e.g. the event.' }, 400);

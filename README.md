@@ -1,6 +1,6 @@
 # Lakeville PTA – Events App planning portal
 
-A private, shared planning questionnaire for Lakeville PTA (Jessie, Jimmy) and DBY. It covers six sections of questions, saved shared answers, files attached to any answer (JPG, PNG, PDF, Excel), Previous/Next paging, an owner-only "Pro tier planning" page (OWNER_EMAILS), a Lakeville team chat tagged by event topic (read-only for the owner) alongside "Questions for DBY", team comments with replies, resolve, edit, delete and attachments, a "Comment on intro" anchor on every page, and an illustrative app preview.
+A private, shared planning questionnaire for Lakeville PTA (Jessie, Jimmy) and DBY. It covers six sections of questions, saved shared answers, files attached to any answer (JPG, PNG, PDF, Excel), Previous/Next paging, an owner-only "Pro tier planning" page (OWNER_EMAILS), a Lakeville team chat tagged by event topic (the owner can post too) alongside "Questions for DBY", team comments with replies, resolve, edit, delete and attachments, a "Comment on intro" anchor on every page, and an illustrative app preview.
 
 It runs as **one Cloudflare Worker** with a D1 database. There is no framework, no npm install and no build server.
 
