@@ -211,7 +211,7 @@ function tabBody(tab) {
     h('section', { class: 'welcome' },
       h('div', null, h('span', { class: 'eyebrow' }, 'A SIMPLE FIRST STEP'), h('h2', null, 'Your events. Your priorities.', h('br'), 'A concept we can shape together.'),
         h('p', null, 'Short answers are enough. Add what you know now and return whenever you need. Everyone invited to this workspace can view and edit the same planning answers.'),
-        h('button', { class: 'primary', onclick: () => { const p = $('team-goal'); p?.scrollIntoView({ behavior: 'smooth', block: 'start' }); setTimeout(() => $(fieldId('start', 'completedBy'))?.focus({ preventScroll: true }), 400); } }, 'Get started ', icon('right', 16))),
+        null),
       h('div', { class: 'path' }, [['01', 'Share how things work today', 'Events, tools and what gets in the way.'], ['02', 'Explore a first concept', 'Review the sample app and priorities.'], ['03', 'Talk it through', 'Confirm the scope before an estimate.']].map(([n, a, b]) => h('div', null, h('span', null, n), h('p', null, h('strong', null, a), h('small', null, b)))))),
     h('section', { class: 'panel', id: 'team-goal' }, h('h2', null, 'Your team & goal'), h('p', { class: 'muted' }, 'Tell us who’s helping and what matters most.'), fields(sec))];
   if (tab === 'events') return [
