@@ -73,7 +73,7 @@ const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'applic
 
 /* ---------- state ---------- */
 const S = { panelView: 'team', tab: 'start', data: {}, records: {}, files: [], fileBusy: {}, fileError: {}, dirty: {}, loaded: false, busy: false, error: '', notice: '', incoming: [], me: null, nameEditing: false, nameBusy: false, nameError: '', commentsOpen: window.innerWidth > 1100, counts: [] };
-const C = { scope: 'current', threads: [], active: null, messages: [], drafts: {}, uploads: {}, error: '', connected: false, busy: false, uploading: false, showResolved: false, composing: false, newAnchor: null, nextThreads: null, nextMessages: null, me: null, editing: null, editText: '', confirmDelete: null, outgoing: null, scrollAtEnd: true, listKey: '', lastList: '', lastThread: '', gen: 0 };
+const C = { scope: 'all', threads: [], active: null, messages: [], drafts: {}, uploads: {}, error: '', connected: false, busy: false, uploading: false, showResolved: false, composing: false, newAnchor: null, nextThreads: null, nextMessages: null, me: null, editing: null, editText: '', confirmDelete: null, outgoing: null, scrollAtEnd: true, listKey: '', lastList: '', lastThread: '', gen: 0 };
 const postTopic = () => T.filter === 'All' ? (T.topics.includes('General') ? 'General' : T.topics[0]) : T.filter;
 const T = { messages: [], topics: ['General'], filter: 'All', drafts: {}, ref: null, me: null, readOnly: false, editing: null, editText: '', confirmDelete: null, busy: false, error: '', last: '', newTopic: null, nextBefore: null, scrollAtEnd: true, loaded: false };
 const current = () => S.data[S.tab] || {};
@@ -374,7 +374,6 @@ function comment(f) {
 function commentIntro() { openComposer({ section: S.tab, fieldKey: INTRO_KEY, quote: (titleFor(S.tab) + ' — ' + descriptions[S.tab]).slice(0, 500) }); }
 function openComposer(anchor) {
   S.panelView = 'dby'; C.newAnchor = anchor; C.active = null; C.messages = []; C.composing = true; C.error = ''; C.editing = null; C.confirmDelete = null;
-  C.scope = anchor.section === 'general' ? 'general' : 'current';
   S.commentsOpen = true; renderLayoutState(); onSectionChange(true);
   setTimeout(() => $('team-comment')?.focus(), 30);
 }
@@ -401,8 +400,8 @@ function updateCounts(counts) {
 }
 
 /* ---------- comments panel ---------- */
-const listSection = () => C.scope === 'current' ? (ownerOnly(S.tab) ? 'all' : S.tab) : C.scope === 'general' ? 'general' : 'all';
-const target = () => C.newAnchor || { section: C.scope === 'general' ? 'general' : S.tab, fieldKey: null, quote: '' };
+const listSection = () => 'all';
+const target = () => C.newAnchor || { section: 'general', fieldKey: null, quote: '' };
 const draftKey = () => C.active ? 'reply:' + C.active.id : 'new:' + target().section + ':' + (target().fieldKey || '');
 function onSectionChange(force) {
   const key = listSection();
@@ -613,15 +612,14 @@ function renderPanel() {
         C.messages.map(messageView)),
       h('div', { class: 'thread-actions' }, h('button', { class: 'quiet', disabled: C.busy, onclick: resolve }, icon(a.resolved ? 'undo' : 'check', 14), a.resolved ? ' Reopen discussion' : ' Resolve discussion'))
     ] : [
-      h('div', { class: 'comments-filters' },
-        h('label', null, 'Show', h('select', { 'aria-label': 'Discussion scope', onchange: e => { C.scope = e.target.value; C.newAnchor = null; C.composing = false; C.error = ''; onSectionChange(); } },
-          [['current', 'This section'], ['all', 'All sections'], ['general', 'General discussion']].map(([v, l]) => { const o = h('option', { value: v }, l); o.selected = C.scope === v; return o; }))),
-        h('label', { class: 'resolved-filter' }, h('input', { type: 'checkbox', checked: C.showResolved, onchange: e => { C.showResolved = e.target.checked; renderPanel(); } }), 'Include resolved')),
+      h('div', { class: 'comments-filters dby-bar' },
+        h('span', { class: 'dby-count' }, visible.length ? `${visible.length} ${C.showResolved ? '' : 'open '}${visible.length === 1 ? 'discussion' : 'discussions'}` : ''),
+        h('label', { class: 'resolved-filter' }, h('input', { type: 'checkbox', checked: C.showResolved, onchange: e => { C.showResolved = e.target.checked; renderPanel(); } }), 'Show resolved')),
       h('div', { class: 'thread-list' },
-        !visible.length ? h('div', { class: 'comment-empty' }, icon('message', 24), h('strong', null, `No ${C.showResolved ? '' : 'open '}discussions yet`), h('p', null, 'Ask DBY a question about this page, or use “Ask DBY” beside a question to keep it attached there.')) : null,
+        !visible.length ? h('div', { class: 'comment-empty' }, icon('message', 24), h('strong', null, `No ${C.showResolved ? '' : 'open '}discussions yet`), h('p', null, 'Use “Ask DBY” beside any question, or ask something general below. DBY’s replies appear here.')) : null,
         visible.map(t => h('button', { class: 'thread-card', onclick: () => openThread(t) }, h('small', null, sectionName(t.section) + (t.resolved ? ' · Resolved' : '')), h('strong', null, location(t)), h('p', null, t.first_message || 'Attached examples'), h('span', null, `${t.created_name} · ${t.message_count} ${t.message_count === 1 ? 'comment' : 'comments'}`))),
         C.nextThreads ? h('button', { class: 'quiet', disabled: C.busy, onclick: () => older('threads') }, 'Load older discussions') : null),
-      h('button', { class: 'new-discussion', onclick: () => { C.newAnchor = null; C.composing = !C.composing; renderPanel(); if (C.composing) setTimeout(() => $('team-comment')?.focus(), 0); } }, icon('plus', 16), C.composing ? 'Hide new discussion' : 'New discussion')
+      h('button', { class: 'new-discussion', onclick: () => { C.newAnchor = null; C.composing = !C.composing; renderPanel(); if (C.composing) setTimeout(() => $('team-comment')?.focus(), 0); } }, icon('plus', 16), C.composing ? 'Cancel' : 'Ask a general question')
     ],
     (a && !a.resolved) || (!a && C.composing) ? composeView() : null);
   renderPanelHeader();

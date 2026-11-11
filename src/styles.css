@@ -117,3 +117,6 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .brandmark{width:54px!important;height:48px!important;padding:0 5px;display:grid;place-items:center}
 .brandmark img{width:44px;height:auto;display:block}
 @media(max-width:650px){.brandmark{width:46px!important;height:40px!important}.brandmark img{width:36px}}
+
+.dby-bar{display:flex!important;justify-content:space-between;align-items:center;padding:12px 18px!important}
+.dby-count{font-size:11px;color:#6b7590}

@@ -146,6 +146,15 @@ with sync_playwright() as p:
     y.screenshot(path='/tmp/shot-pro.png')
     check(j.locator('.pagenav-btn').count() >= 1, 'jessie paging ok')
     check(y.locator('#introComment').count() == 0 and y.locator('.section-comment').count() == 0, 'intro + page-level DBY buttons removed')
+    # Questions for DBY: no scope dropdown, one list, general question
+    y.click('.panel-tab:has-text("Questions for DBY")')
+    check(y.locator('select[aria-label="Discussion scope"]').count() == 0, 'scope dropdown removed')
+    if y.locator('.thread-top button').count(): y.locator('.thread-top button').click()
+    n0 = y.locator('.thread-card').count()
+    y.locator('.new-discussion').click(); expect(y.locator('.compose-context strong')).to_have_text('General discussion')
+    y.fill('#team-comment', 'General question for DBY'); y.click('#sendBtn'); expect(y.locator('.chat-message')).to_have_count(1)
+    y.locator('.thread-top button').click(); expect(y.locator('.thread-card')).to_have_count(n0 + 1, timeout=6000)
+    check(True, 'all discussions listed together (question + general)')
     # files on answers
     y.click('nav button[aria-label="Current events"]')
     y.set_input_files('#files-answer-events-event0Process input[type=file]', files=[{'name':'signups.png','mimeType':'image/png','buffer':bytes([137,80,78,71,13,10,26,10,0,0,0,0])},{'name':'budget.xlsx','mimeType':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','buffer':bytes([80,75,3,4,0,0])}])
