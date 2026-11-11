@@ -1,7 +1,7 @@
 /* Lakeville PTA planning portal – browser code (no framework). */
 (() => {
 'use strict';
-const {tabs: allTabs, features, steps, sections, PRIORITY, SIGNAL, TIERS, OWNER_SECTIONS, INTRO_KEY} = MODEL;
+const {MAX_EVENTS, EVENT_FIELDS, tabs: allTabs, features, steps, sections, PRIORITY, SIGNAL, TIERS, OWNER_SECTIONS, INTRO_KEY} = MODEL;
 const ownerOnly = id => OWNER_SECTIONS.includes(id);
 let tabs = allTabs.filter(t => !ownerOnly(t[0]));
 const descriptions = {start:'A shared starting point for Lakeville and DBY.',events:'Tell us how Lakeville runs events today. Start with one or two you know well.',features:'See what’s included in your plan and what’s available as an upgrade.',preview:'Explore one possible direction, then tell us what fits Lakeville.',workflow:'Walk us through a real event and decide who needs access.',questions:'Help us shape the first version and understand the accounting needs.',pro:'Only you can see this page. Sort what Lakeville asks for into the higher tier as their answers come in.'};
@@ -121,7 +121,10 @@ function setTab(id) { S.tab = id; S.error = ''; S.notice = ''; renderNav(); rend
 function field(f) {
   const tab = S.tab, id = fieldId(tab, f.key), count = countFor(tab, f.key);
   const disabled = !S.loaded || S.busy;
-  const control = f.options
+  const dyn = tab === 'workflow' && f.key === 'event' ? [...new Set([...eventNames(), ...(current()[f.key] ? [current()[f.key]] : [])])] : null;
+  const control = dyn
+    ? h('select', { id, 'aria-label': f.label, disabled, onchange: e => change(f.key, e.target.value) }, h('option', { value: '' }, dyn.length ? 'Choose an event' : 'Add events on the Current events page first'), dyn.map(o => h('option', { value: o }, o)))
+    : f.options
     ? h('select', { id, 'aria-label': f.label, disabled, onchange: e => change(f.key, e.target.value) }, h('option', { value: '' }, 'Choose when ready'), f.options.map(o => h('option', { value: o }, o)))
     : h('textarea', { id, 'aria-label': f.label, rows: (f.key.includes('Name') || f.key === 'completedBy') ? 2 : 3, maxlength: 6000, disabled, placeholder: 'Your answer', oninput: e => change(f.key, e.target.value) });
   control.value = current()[f.key] || '';
@@ -184,6 +187,24 @@ async function removeAnswerFile(tab, key, file) {
   finally { S.fileBusy[k] = false; renderFileArea(tab, key); }
 }
 const fields = list => h('div', { class: 'fields' }, list.map(field));
+const SHORT = ['Event name', 'Who runs it?', 'How do you run it today?', 'What is the hardest part?', 'What would make it easier?', 'When should we look at it?'];
+const eventFilled = i => sections.events.slice(i * EVENT_FIELDS, (i + 1) * EVENT_FIELDS).some(f => (S.data.events?.[f.key] || '').trim());
+const eventNames = () => Array.from({ length: MAX_EVENTS }, (_, i) => (S.data.events?.['event' + i + 'Name'] || '').trim()).filter(Boolean);
+function visibleEventCount() {
+  let last = -1; for (let i = 0; i < MAX_EVENTS; i++) if (eventFilled(i)) last = i;
+  return Math.min(MAX_EVENTS, Math.max(last + 2, S.eventSlots || 1));
+}
+function eventCards(sec) {
+  const n = visibleEventCount();
+  return [
+    Array.from({ length: n }, (_, i) => {
+      const name = (S.data.events?.['event' + i + 'Name'] || '').trim();
+      return h('section', { class: 'panel event-card', id: 'event-card-' + i },
+        h('div', { class: 'event-card-head' }, h('span', { class: 'event-num' }, String(i + 1)), h('h2', { id: 'event-title-' + i }, name || (eventFilled(i) ? 'Event ' + (i + 1) : 'New event'))),
+        h('div', { class: 'fields' }, sec.slice(i * EVENT_FIELDS, (i + 1) * EVENT_FIELDS).map((f, k) => field({ ...f, label: SHORT[k] }))));
+    }),
+    n < MAX_EVENTS ? h('button', { class: 'add-event', type: 'button', onclick: () => { S.eventSlots = n + 1; renderMain(); setTimeout(() => { const el = $(fieldId('events', 'event' + n + 'Name')); el?.scrollIntoView({ behavior: 'smooth', block: 'center' }); el?.focus({ preventScroll: true }); }, 50); } }, icon('plus', 16), 'Add another event') : h('p', { class: 'muted' }, 'That’s the most events this page holds. Add others under “Anything else about your events?”.')];
+}
 function tabBody(tab) {
   const sec = sections[tab];
   if (tab === 'start') return [
@@ -192,13 +213,13 @@ function tabBody(tab) {
         h('p', null, 'Short answers are enough. Add what you know now and return whenever you need. Everyone invited to this workspace can view and edit the same planning answers.'),
         h('button', { class: 'primary', onclick: () => setTab('events') }, 'Start with your events ', icon('right', 16))),
       h('div', { class: 'path' }, [['01', 'Share how things work today', 'Events, tools and what gets in the way.'], ['02', 'Explore a first concept', 'Review the sample app and priorities.'], ['03', 'Talk it through', 'Confirm the scope before an estimate.']].map(([n, a, b]) => h('div', null, h('span', null, n), h('p', null, h('strong', null, a), h('small', null, b)))))),
-    h('section', { class: 'panel' }, h('h2', null, 'Your starting point'), h('p', { class: 'muted' }, 'Begin with the event you would most like to improve.'), fields(sec))];
+    h('section', { class: 'panel' }, h('h2', null, 'Your team & goal'), h('p', { class: 'muted' }, 'Tell us who’s helping and what matters most.'), fields(sec))];
   if (tab === 'events') return [
     h('details', { class: 'examples' }, h('summary', null, 'See illustrative event examples'),
       h('div', { class: 'examplegrid' }, [['Holiday Gift Shop', 'Paper forms / Excel', 'Tracking volunteers'], ['School Fundraiser', 'Google Forms', 'Managing payments'], ['Family Night', 'Email sign-ups', 'Tracking attendance']].map(e => h('div', null, h('strong', null, e[0]), h('p', null, e[1]), h('small', null, 'Possible challenge: ' + e[2])))),
       h('p', null, 'These are examples from the planning draft, not Lakeville-confirmed events or tools.')),
-    [0, 1, 2].map(i => h('section', { class: 'panel' }, h('h2', null, 'Event ' + (i + 1)), fields(sec.slice(i * 5, i * 5 + 5)))),
-    h('section', { class: 'panel' }, h('h2', null, 'Your tools & other events'), fields(sec.slice(15)))];
+    eventCards(sec),
+    h('section', { class: 'panel' }, h('h2', null, 'Your tools & other notes'), fields(sec.slice(MAX_EVENTS * EVENT_FIELDS)))];
   if (tab === 'features') {
     const card = ([id, title, desc]) => h('section', { class: 'feature' },
       h('div', null, h('span', { class: 'tier-badge base' }, 'Included'), h('h2', null, title), h('p', null, desc)),
@@ -299,6 +320,8 @@ function renderSaveBar() {
 }
 function setFieldsDisabled() { document.querySelectorAll('#main .field textarea, #main .field select').forEach(el => { el.disabled = !S.loaded || S.busy; }); }
 function change(key, value) {
+  const m = S.tab === 'events' && /^event(\d+)Name$/.exec(key);
+  if (m) { const t = $('event-title-' + m[1]); if (t) t.textContent = value.trim() || 'Event ' + (+m[1] + 1); }
   S.data = { ...S.data, [S.tab]: { ...S.data[S.tab], [key]: value } };
   const wasDirty = S.dirty[S.tab]; S.dirty = { ...S.dirty, [S.tab]: true }; S.notice = '';
   if (!wasDirty) renderNav();
@@ -359,6 +382,11 @@ async function syncPlan() {
     if (clean.length) {
       for (const s of clean) { S.records[s.id] = s; S.data[s.id] = s.content; }
       refreshFieldValues(S.tab); renderNav(); renderSaveBar();
+      if (S.tab === 'events') {
+        const shown = document.querySelectorAll('#main .event-card').length, typing = document.activeElement && $('main').contains(document.activeElement);
+        if (shown !== visibleEventCount() && !typing) renderMain();
+        else for (let i = 0; i < shown; i++) { const t = $('event-title-' + i), n = (S.data.events?.['event' + i + 'Name'] || '').trim(); if (t && n) t.textContent = n; }
+      }
     }
   } catch { /* try again next tick */ }
   finally { planSyncing = false; }

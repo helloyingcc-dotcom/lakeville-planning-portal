@@ -110,7 +110,7 @@ const ownerMsg = id(); ok((await call('ying', '/api/team', J('POST', { id: owner
 ok((await call('jessie', '/api/team', J('POST', { id: id(), topic: 'Nope', body: 'x' }))).s === 400, 'unknown topic rejected');
 ok((await call('jessie', '/api/team', J('POST', { id: id(), topic: 'General', body: 'x', ref: { section: 'pro', field: 'vendorsSignal' } }))).s === 400, 'cannot link owner-only question');
 tg = await call('ying', '/api/team');
-ok(tg.j.messages.length === 1 && tg.j.messages[0].ref_label === 'Current events › How do you manage it today?' && tg.j.messages[0].author_name === 'Jessie', 'owner reads message with label ' + JSON.stringify(tg.j.messages[0]?.ref_label));
+ok(tg.j.messages.length === 1 && tg.j.messages[0].ref_label === 'Current events › Event 1 · How do you run it today?' && tg.j.messages[0].author_name === 'Jessie', 'owner reads message with label ' + JSON.stringify(tg.j.messages[0]?.ref_label));
 ok((await call('jimmy', '/api/team', J('PATCH', { id: tm, body: 'hijack' }))).s === 403, 'cannot edit others team msg');
 ok((await call('jessie', '/api/team', J('PATCH', { id: tm, body: 'Do we need 3 entrances or 2?' }))).s === 200, 'edit own team msg');
 ok((await call('jimmy', '/api/team/topics', J('POST', { name: '  Spring  Carnival ' }))).j.name === 'Spring Carnival', 'add topic');
