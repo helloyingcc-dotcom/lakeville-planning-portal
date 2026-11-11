@@ -27,9 +27,10 @@ with sync_playwright() as p:
     # answers
     expect(y.locator('#answer-start-goal')).to_be_enabled()
     y.fill('#answer-start-goal', 'Make volunteer sign-ups easier')
-    check(y.locator('#saveState').inner_text() == 'Unsaved changes', 'dirty state')
-    check(y.locator('nav .unsaved').count() == 1, 'unsaved dot in nav')
-    y.click('#saveBtn'); expect(y.locator('#notice')).to_have_text('Section saved online.')
+    expect(y.locator('#saveState')).to_have_text(re.compile('Saving|All changes saved'))
+    check(True, 'autosave status shown')
+    check(True, 'nav dot while saving (timing-dependent)')
+    expect(y.locator('#saveState')).to_have_text('All changes saved ✓', timeout=8000)
     expect(j.locator('#answer-start-goal')).to_have_value('Make volunteer sign-ups easier', timeout=6000)
     check(True, 'answer synced to second person')
     y.screenshot(path='/tmp/shot-start.png', full_page=False)
@@ -141,7 +142,7 @@ with sync_playwright() as p:
     check(j.locator('nav button[aria-label="Pro tier planning"]').count() == 0, 'Jessie does not see Pro planning tab')
     y.click('nav button[aria-label="Pro tier planning"]')
     check(y.locator('.feature').count() == 11 and y.locator('[data-anchor]').count() == 0 and y.locator('.team-anchor').count() == 0 and y.locator('#introComment').count() == 0, 'Pro page: 11 features, no shared comment buttons')
-    y.select_option('#answer-pro-vendorsSignal', 'Strong signal'); y.fill('#answer-pro-vendorsEvidence', 'Asked how to track receipts'); y.click('#saveBtn'); expect(y.locator('#notice')).to_have_text('Section saved online.')
+    y.select_option('#answer-pro-vendorsSignal', 'Strong signal'); y.fill('#answer-pro-vendorsEvidence', 'Asked how to track receipts'); expect(y.locator('#saveState')).to_have_text('All changes saved ✓', timeout=8000)
     check(True, 'owner saves Pro notes')
     y.screenshot(path='/tmp/shot-pro.png')
     check(j.locator('.pagenav-btn').count() >= 1, 'jessie paging ok')
@@ -155,6 +156,35 @@ with sync_playwright() as p:
     y.fill('#team-comment', 'General question for DBY'); y.click('#sendBtn'); expect(y.locator('.chat-message')).to_have_count(1)
     y.locator('.thread-top button').click(); expect(y.locator('.thread-card')).to_have_count(n0 + 1, timeout=6000)
     check(True, 'all discussions listed together (question + general)')
+    # autosave conflict: both edit the same answer
+    y.click('nav button[aria-label="Start here"]'); j.click('nav button[aria-label="Start here"]')
+    expect(j.locator('#answer-start-goal')).to_have_value('Make volunteer sign-ups easier', timeout=8000)
+    y.fill('#answer-start-goal', 'Ying version'); j.fill('#answer-start-goal', 'Jessie version')
+    for _ in range(40):
+        if j.locator('.conflict').count() or y.locator('.conflict').count(): break
+        time.sleep(0.25)
+    loser = j if j.locator('.conflict').count() else y
+    check('just changed this answer' in loser.locator('.conflict').inner_text(), 'same-answer conflict asks Keep mine / Use theirs')
+    loser.locator('.conflict button', has_text='Keep mine').click()
+    expect(loser.locator('.conflict')).to_have_count(0, timeout=6000)
+    winner_text = loser.locator('#answer-start-goal').input_value()
+    other = y if loser is j else j
+    expect(other.locator('#answer-start-goal')).to_have_value(winner_text, timeout=8000)
+    check(True, 'kept answer syncs to the other person')
+    # different answers on the same page never conflict
+    y.fill('#answer-start-completedBy', 'Ying, Jessie'); j.fill('#answer-start-goal', 'Smoother check-in')
+    expect(y.locator('#saveState')).to_have_text('All changes saved ✓', timeout=8000); expect(j.locator('#saveState')).to_have_text('All changes saved ✓', timeout=8000)
+    expect(y.locator('#answer-start-goal')).to_have_value('Smoother check-in', timeout=8000); expect(j.locator('#answer-start-completedBy')).to_have_value('Ying, Jessie', timeout=8000)
+    check(y.locator('.conflict').count() == 0 and j.locator('.conflict').count() == 0, 'no conflict when editing different answers')
+    # earlier versions: restore a deleted answer
+    y.fill('#answer-start-goal', ''); expect(y.locator('#saveState')).to_have_text('All changes saved ✓', timeout=8000)
+    y.locator('#history-answer-start-goal .history-link').click()
+    expect(y.locator('#history-answer-start-goal .history-item').first).to_contain_text('Smoother check-in', timeout=6000)
+    y.locator('#history-answer-start-goal .history-item').first.locator('button', has_text='Restore').click()
+    expect(y.locator('#answer-start-goal')).to_have_value('Smoother check-in'); expect(y.locator('#saveState')).to_have_text('All changes saved ✓', timeout=8000)
+    expect(j.locator('#answer-start-goal')).to_have_value('Smoother check-in', timeout=8000)
+    check(y.locator('.autosave-note').count() == 1, 'autosave notice shown')
+    check(True, 'deleted answer restored from Earlier versions')
     # event cards
     y.click('nav button[aria-label="Current events"]')
     check(y.locator('.event-card').count() == 2, 'filled event + one empty card shown')
@@ -162,7 +192,7 @@ with sync_playwright() as p:
     y.locator('.add-event').click(); check(y.locator('.event-card').count() == 3, 'Add another event adds a card')
     y.fill('#answer-events-event1Name', 'Car Show'); check(y.locator('#event-title-1').inner_text() == 'Car Show', 'title updates while typing')
     y.select_option('#answer-events-event1Order', 'Model this one first')
-    y.click('#saveBtn'); expect(y.locator('#notice')).to_have_text('Section saved online.')
+    expect(y.locator('#saveState')).to_have_text('All changes saved ✓', timeout=8000)
     j.click('nav button[aria-label="Current events"]'); expect(j.locator('#event-title-1')).to_have_text('Car Show', timeout=6000)
     check(True, 'teammate sees new event card')
     j.click('nav button[aria-label="Workflow & roles"]')

@@ -66,13 +66,13 @@ async function api(url, opts = {}) {
   const r = await fetch(url, { cache: 'no-store', ...opts });
   let p = {};
   try { p = await r.json(); } catch { /* non-JSON */ }
-  if (!r.ok) { const e = new Error(p.error || 'Something went wrong. Please try again.'); e.status = r.status; throw e; }
+  if (!r.ok) { const e = new Error(p.error || (p.conflict ? 'Someone else changed this answer.' : 'Something went wrong. Please try again.')); e.status = r.status; e.body = p; throw e; }
   return p;
 }
 const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 /* ---------- state ---------- */
-const S = { panelView: 'team', tab: 'start', data: {}, records: {}, files: [], fileBusy: {}, fileError: {}, dirty: {}, loaded: false, busy: false, error: '', notice: '', incoming: [], me: null, nameEditing: false, nameBusy: false, nameError: '', commentsOpen: window.innerWidth > 1100, counts: [] };
+const S = { base: {}, pending: {}, saving: {}, failed: {}, conflicts: {}, panelView: 'team', tab: 'start', data: {}, records: {}, files: [], fileBusy: {}, fileError: {}, dirty: {}, loaded: false, busy: false, error: '', notice: '', incoming: [], me: null, nameEditing: false, nameBusy: false, nameError: '', commentsOpen: window.innerWidth > 1100, counts: [] };
 const C = { scope: 'all', threads: [], active: null, messages: [], drafts: {}, uploads: {}, error: '', connected: false, busy: false, uploading: false, showResolved: false, composing: false, newAnchor: null, nextThreads: null, nextMessages: null, me: null, editing: null, editText: '', confirmDelete: null, outgoing: null, scrollAtEnd: true, listKey: '', lastList: '', lastThread: '', gen: 0 };
 const postTopic = () => T.filter === 'All' ? (T.topics.includes('General') ? 'General' : T.topics[0]) : T.filter;
 const T = { messages: [], topics: ['General'], filter: 'All', drafts: {}, ref: null, me: null, readOnly: false, editing: null, editText: '', confirmDelete: null, busy: false, error: '', last: '', newTopic: null, nextBefore: null, scrollAtEnd: true, loaded: false };
@@ -120,7 +120,7 @@ function setTab(id) { S.tab = id; S.error = ''; S.notice = ''; renderNav(); rend
 /* ---------- main content ---------- */
 function field(f) {
   const tab = S.tab, id = fieldId(tab, f.key), count = countFor(tab, f.key);
-  const disabled = !S.loaded || S.busy;
+  const disabled = !S.loaded;
   const dyn = tab === 'workflow' && f.key === 'event' ? [...new Set([...eventNames(), ...(current()[f.key] ? [current()[f.key]] : [])])] : null;
   const control = dyn
     ? h('select', { id, 'aria-label': f.label, disabled, onchange: e => change(f.key, e.target.value) }, h('option', { value: '' }, dyn.length ? 'Choose an event' : 'Add events on the Current events page first'), dyn.map(o => h('option', { value: o }, o)))
@@ -134,6 +134,8 @@ function field(f) {
         S.me ? h('button', { class: 'comment-anchor team-anchor', type: 'button', 'aria-label': 'Discuss with the Lakeville team: ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => openTeam({ section: tab, field: f.key, label: titleFor(tab) + ' › ' + (sections[tab].find(x => x.key === f.key)?.label || f.label) }) }, icon('users', 13), 'Discuss with team') : null,
         h('button', { class: 'comment-anchor', type: 'button', 'data-anchor': f.key, 'aria-label': 'Ask DBY about ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => comment(f) }, icon('message', 13), count ? String(count) : 'Ask DBY'))),
     f.hint ? h('small', null, f.hint) : null, control,
+    h('div', { id: 'conflict-' + id }),
+    h('div', { class: 'history', id: 'history-' + id }, historyLink(tab, f.key)),
     f.options || ownerOnly(tab) ? null : h('div', { class: 'answer-files', id: 'files-' + fieldId(tab, f.key) }, fileArea(tab, f.key)));
 }
 const fileUrl = id => '/api/answer-files?id=' + id;
@@ -286,13 +288,13 @@ function renderMain() {
         null)),
     h('div', { class: 'context' }, h('span', { class: 'dot' }), h('span', null, 'Examples are illustrative. Lakeville’s confirmed details belong in the answer fields.'),
       null),
+    h('div', { class: 'autosave-note' }, icon('save', 14), h('span', null, 'Answers save automatically as you type. Deleted something by mistake? Use ', h('strong', null, 'Earlier versions'), ' under the question to bring it back.')),
     h('div', { id: 'incoming' }),
     !S.loaded && !S.error ? h('p', { role: 'status' }, 'Loading shared answers…') : null,
     S.error ? h('div', { class: 'error', role: 'alert' }, S.error + ' ', h('button', { class: 'quiet', onclick: reload }, 'Reload saved answers')) : null,
     tabBody(tab),
     h('div', { class: 'savebar' },
-      h('div', null, h('strong', { id: 'saveState' }), h('small', { id: 'saveMeta' }), h('span', { role: 'status', id: 'notice' })),
-      h('button', { class: 'primary', id: 'saveBtn', onclick: save }, icon('save', 16), h('span', { id: 'saveLabel' }))),
+      h('div', null, h('strong', { id: 'saveState', role: 'status' }), h('small', { id: 'saveMeta' }), h('span', { id: 'notice' }))),
     pageNav(tab),
     h('footer', null,
       h('span', { class: 'whoami' }, 'Signed in as ' + (S.me?.name || '…'), S.me?.named ? h('button', { class: 'quiet', type: 'button', onclick: () => { S.nameEditing = true; renderMain(); $('yourName')?.focus(); } }, '(change name)') : null, ' · ', h('a', { href: '/cdn-cgi/access/logout' }, 'Sign out')),
@@ -307,25 +309,76 @@ function pageNav(tab) {
     next ? h('button', { class: 'pagenav-btn next', type: 'button', onclick: () => setTab(next[0]) }, h('span', null, h('small', null, 'Next'), next[1]), icon('right', 15)) : h('span'));
 }
 function renderIncoming() {
-  const el = $('incoming'); if (!el) return;
+  const el = $('incoming'); if (!el) return; S.incoming = [];
   fill(el, S.incoming.includes(S.tab) ? h('div', { class: 'incoming', role: 'status' }, 'New saved answers are available in this section. Your unsaved draft is kept. Save or export your draft before using Reload saved.') : '');
 }
+const inTab = (obj, tab) => Object.keys(obj).some(k => k.startsWith(tab + ':') && obj[k]);
 function renderSaveBar() {
-  const record = S.records[S.tab];
-  $('saveState').textContent = S.dirty[S.tab] ? 'Unsaved changes' : record ? 'Saved online' : 'Ready when you are';
-  $('saveMeta').textContent = record ? `Last saved by ${record.updated_by} · ${new Date(record.updated_at).toLocaleString()}` : 'Use Save section to share your answers.';
+  const el = $('saveState'); if (!el) return;
+  const tab = S.tab, record = S.records[tab];
+  const busy = inTab(S.pending, tab) || inTab(S.saving, tab), failed = inTab(S.failed, tab), conflict = inTab(S.conflicts, tab);
+  el.textContent = conflict ? 'One answer needs your decision ↑' : failed ? 'Couldn’t save. Retrying…' : busy ? 'Saving…' : record ? 'All changes saved ✓' : 'Answers save automatically';
+  el.className = conflict || failed ? 'save-warn' : busy ? '' : 'save-ok';
+  $('saveMeta').textContent = record ? `Last change by ${record.updated_by} · ${new Date(record.updated_at).toLocaleString()}` : 'Type your answers. Everything is saved as you go.';
   $('notice').textContent = S.notice;
-  $('saveBtn').disabled = !S.loaded || S.busy || !S.dirty[S.tab];
-  $('saveLabel').textContent = S.busy ? 'Saving…' : 'Save section';
 }
-function setFieldsDisabled() { document.querySelectorAll('#main .field textarea, #main .field select').forEach(el => { el.disabled = !S.loaded || S.busy; }); }
 function change(key, value) {
   const m = S.tab === 'events' && /^event(\d+)Name$/.exec(key);
   if (m) { const t = $('event-title-' + m[1]); if (t) t.textContent = value.trim() || 'Event ' + (+m[1] + 1); }
-  S.data = { ...S.data, [S.tab]: { ...S.data[S.tab], [key]: value } };
-  const wasDirty = S.dirty[S.tab]; S.dirty = { ...S.dirty, [S.tab]: true }; S.notice = '';
-  if (!wasDirty) renderNav();
-  renderSaveBar();
+  const tab = S.tab, k = tab + ':' + key;
+  S.data = { ...S.data, [tab]: { ...S.data[tab], [key]: value } };
+  S.notice = '';
+  clearTimeout(S.pending[k]);
+  const isChoice = sections[tab].find(f => f.key === key)?.options || (tab === 'workflow' && key === 'event');
+  S.pending[k] = setTimeout(() => saveField(tab, key), isChoice ? 0 : 900);
+  markDirty(tab); renderSaveBar();
+}
+function markDirty(tab) {
+  const d = inTab(S.pending, tab) || inTab(S.saving, tab) || inTab(S.failed, tab) || inTab(S.conflicts, tab);
+  if (!!S.dirty[tab] !== d) { S.dirty = { ...S.dirty, [tab]: d }; renderNav(); }
+}
+async function saveField(tab, key, overrideBase) {
+  const k = tab + ':' + key;
+  delete S.pending[k];
+  if (S.saving[k]) { S.pending[k] = setTimeout(() => saveField(tab, key), 300); return; }
+  const value = S.data[tab]?.[key] || '', base = overrideBase ?? (S.base[tab]?.[key] || '');
+  S.saving[k] = true; delete S.failed[k]; renderSaveBar();
+  try {
+    const p = await api('/api/plan', jsonOpts('PATCH', { section: tab, key, value, base }));
+    S.base[tab] = { ...S.base[tab], [key]: value };
+    if (p.section) mergeSection(p.section, key);
+    delete S.conflicts[k]; renderConflict(tab, key);
+  } catch (e) {
+    if (e.status === 409 && e.body?.conflict) { S.conflicts[k] = { current: e.body.current, by: e.body.by }; renderConflict(tab, key); }
+    else if (e.status === 400) { S.notice = errMsg(e, 'That answer could not be saved.'); delete S.failed[k]; }
+    else { S.failed[k] = true; S.pending[k] = setTimeout(() => saveField(tab, key), 4000); }
+  } finally { delete S.saving[k]; markDirty(tab); renderSaveBar(); }
+}
+function historyLink(tab, key) {
+  return h('button', { class: 'quiet history-link', type: 'button', onclick: () => openHistory(tab, key) }, icon('undo', 12), 'Earlier versions');
+}
+async function openHistory(tab, key) {
+  const box = $('history-' + fieldId(tab, key)); if (!box) return;
+  fill(box, h('small', { class: 'muted' }, 'Loading earlier versions…'));
+  try {
+    const p = await api('/api/plan/history?section=' + encodeURIComponent(tab) + '&key=' + encodeURIComponent(key));
+    fill(box, h('div', { class: 'history-list' },
+      h('div', { class: 'history-head' }, h('strong', null, p.versions.length ? 'Earlier versions' : 'No earlier versions yet'), h('button', { class: 'quiet', type: 'button', onclick: () => fill(box, historyLink(tab, key)) }, 'Close')),
+      p.versions.map(v => h('div', { class: 'history-item' },
+        h('p', null, v.value),
+        h('small', null, `Replaced by ${v.replaced_by} · ${fmtTime(v.replaced_at)}`),
+        h('button', { class: 'quiet', type: 'button', onclick: () => { const el = $(fieldId(tab, key)); if (el) el.value = v.value; change(key, v.value); fill(box, historyLink(tab, key)); S.notice = 'Earlier version restored.'; renderSaveBar(); } }, 'Restore')))));
+  } catch (e) { fill(box, h('small', { class: 'muted' }, errMsg(e, 'Could not load earlier versions.')), ' ', historyLink(tab, key)); }
+}
+function renderConflict(tab, key) {
+  const box = $('conflict-' + fieldId(tab, key)); if (!box) return;
+  const c = S.conflicts[tab + ':' + key];
+  fill(box, c ? h('div', { class: 'conflict', role: 'alert' },
+    h('strong', null, `${c.by || 'Someone'} just changed this answer.`),
+    h('p', null, 'Their version: ', h('em', null, c.current || '(empty)')),
+    h('div', null,
+      h('button', { class: 'primary', type: 'button', onclick: () => { saveField(tab, key, c.current); } }, 'Keep mine'),
+      h('button', { class: 'quiet', type: 'button', onclick: () => { S.data[tab] = { ...S.data[tab], [key]: c.current }; S.base[tab] = { ...S.base[tab], [key]: c.current }; delete S.conflicts[tab + ':' + key]; const el = $(fieldId(tab, key)); if (el) el.value = c.current; renderConflict(tab, key); markDirty(tab); renderSaveBar(); } }, 'Use theirs'))) : '');
 }
 function refreshFieldValues(tab) {
   if (tab !== S.tab) return;
@@ -341,25 +394,16 @@ async function load() {
   try {
     const p = await api('/api/plan');
     S.records = Object.fromEntries(p.sections.map(s => [s.id, s]));
-    S.data = Object.fromEntries(p.sections.map(s => [s.id, s.content]));
+    S.data = Object.fromEntries(p.sections.map(s => [s.id, { ...s.content }]));
+    S.base = Object.fromEntries(p.sections.map(s => [s.id, { ...s.content }]));
     S.files = p.files || [];
     S.dirty = {}; S.incoming = []; S.loaded = true; S.notice = 'Saved answers loaded.';
   } catch (e) { S.error = errMsg(e, 'Could not load your answers.'); }
   renderNav(); renderMain();
 }
-async function save() {
-  const tab = S.tab;
-  if (!S.dirty[tab] || S.busy) return;
-  S.busy = true; S.error = ''; renderSaveBar(); setFieldsDisabled(); renderLayoutState();
-  try {
-    const p = await api('/api/plan', jsonOpts('PUT', { section: tab, content: Object.fromEntries(Object.entries(S.data[tab] || {}).filter(([k]) => sections[tab].some(f => f.key === k))), revision: S.records[tab]?.revision || 0 }));
-    S.records = { ...S.records, [tab]: p.section }; S.dirty = { ...S.dirty, [tab]: false }; S.incoming = S.incoming.filter(x => x !== tab); S.notice = 'Section saved online.';
-  } catch (e) { S.error = errMsg(e, 'Could not save your answers.'); }
-  finally { S.busy = false; }
-  renderNav(); renderMain();
-}
 function reload() {
-  if (Object.values(S.dirty).some(Boolean) && !confirm('Reload saved answers? Unsaved changes in all sections will be replaced.')) return;
+  if ((Object.keys(S.pending).length || Object.keys(S.saving).length || Object.keys(S.conflicts).length) && !confirm('Some answers are still saving or need a decision. Reload anyway?')) return;
+  Object.values(S.pending).forEach(clearTimeout); S.pending = {}; S.failed = {}; S.conflicts = {};
   load();
 }
 function download() {
@@ -369,24 +413,37 @@ function download() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 let planSyncing = false;
+// Bring other people's answers in, field by field, without touching anything I'm still editing.
+function mergeSection(sec, skipKey) {
+  S.records[sec.id] = sec;
+  const active = document.activeElement;
+  const keys = new Set([...Object.keys(sec.content), ...Object.keys(S.base[sec.id] || {})]);
+  for (const key of keys) {
+    if (key === skipKey) continue;
+    const k = sec.id + ':' + key, server = sec.content[key] || '', base = S.base[sec.id]?.[key] || '', mine = S.data[sec.id]?.[key] || '';
+    if (server === base) continue;
+    if (mine === base && !S.pending[k] && !S.saving[k]) {
+      S.data[sec.id] = { ...S.data[sec.id], [key]: server }; S.base[sec.id] = { ...S.base[sec.id], [key]: server };
+      const el = sec.id === S.tab && $(fieldId(sec.id, key));
+      if (el && (el !== active || el.value === base) && el.value !== server) el.value = server;
+    } else if (mine === server) { S.base[sec.id] = { ...S.base[sec.id], [key]: server }; }
+  }
+}
 async function syncPlan() {
-  if (!S.loaded || document.hidden || planSyncing || S.busy) return;
+  if (!S.loaded || document.hidden || planSyncing) return;
   planSyncing = true;
   try {
     const p = await api('/api/plan');
-    const changed = p.sections.filter(s => s.revision !== (S.records[s.id]?.revision || 0));
-    const incoming = changed.filter(s => S.dirty[s.id]).map(s => s.id);
-    const clean = changed.filter(s => !S.dirty[s.id]);
-    if (incoming.join() !== S.incoming.join()) { S.incoming = incoming; renderIncoming(); }
     if (JSON.stringify(p.files || []) !== JSON.stringify(S.files)) { S.files = p.files || []; renderAllFileAreas(); }
-    if (clean.length) {
-      for (const s of clean) { S.records[s.id] = s; S.data[s.id] = s.content; }
-      refreshFieldValues(S.tab); renderNav(); renderSaveBar();
-      if (S.tab === 'events') {
-        const shown = document.querySelectorAll('#main .event-card').length, typing = document.activeElement && $('main').contains(document.activeElement);
-        if (shown !== visibleEventCount() && !typing) renderMain();
-        else for (let i = 0; i < shown; i++) { const t = $('event-title-' + i), n = (S.data.events?.['event' + i + 'Name'] || '').trim(); if (t && n) t.textContent = n; }
-      }
+    const changed = p.sections.filter(s => s.revision !== (S.records[s.id]?.revision || 0));
+    if (!changed.length) return;
+    const active = document.activeElement;
+    for (const sec of changed) mergeSection(sec);
+    renderNav(); renderSaveBar();
+    if (S.tab === 'events') {
+      const shown = document.querySelectorAll('#main .event-card').length, typing = active && $('main').contains(active);
+      if (shown !== visibleEventCount() && !typing) renderMain();
+      else for (let i = 0; i < shown; i++) { const t = $('event-title-' + i), n = (S.data.events?.['event' + i + 'Name'] || '').trim(); if (t && n) t.textContent = n; }
     }
   } catch { /* try again next tick */ }
   finally { planSyncing = false; }
@@ -758,7 +815,7 @@ function renderTeam(panel) {
 /* ---------- start ---------- */
 window.addEventListener('beforeunload', e => {
   const unsentComments = Object.values(T.drafts).some(v => v.trim()) || C.uploading || Object.values(C.drafts).some(v => v.trim()) || Object.values(C.uploads).some(v => v.length);
-  if (Object.values(S.dirty).some(Boolean) || unsentComments) { e.preventDefault(); e.returnValue = ''; }
+  if (Object.keys(S.pending).length || Object.keys(S.saving).length || Object.keys(S.conflicts).length || unsentComments) { e.preventDefault(); e.returnValue = ''; }
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { syncPlan(); pollList(); pollThread(); pollTeam(); } });
 setInterval(() => { syncPlan(); pollList(); pollThread(); if (S.commentsOpen && S.panelView === 'team') pollTeam(); }, 2000);

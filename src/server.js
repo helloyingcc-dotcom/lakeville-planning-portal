@@ -33,13 +33,19 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS comment_messages_thread ON comment_messages(thread_id, seq)`,
   `CREATE TABLE IF NOT EXISTS answer_files (id TEXT PRIMARY KEY NOT NULL, object_key TEXT NOT NULL, section TEXT NOT NULL, field_key TEXT NOT NULL, author_id TEXT NOT NULL, author_name TEXT NOT NULL, name TEXT NOT NULL, content_type TEXT NOT NULL, size INTEGER NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS answer_files_field ON answer_files(section, field_key, created_at)`,
+  `CREATE TABLE IF NOT EXISTS answer_history (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, section TEXT NOT NULL, field_key TEXT NOT NULL, value TEXT NOT NULL, replaced_by TEXT NOT NULL, replaced_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS answer_history_field ON answer_history(section, field_key, id)`,
   `CREATE TABLE IF NOT EXISTS team_topics (name TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, created_by TEXT NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS team_messages (seq INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, id TEXT NOT NULL UNIQUE, topic TEXT NOT NULL, ref_section TEXT, ref_field TEXT, ref_label TEXT, author_id TEXT NOT NULL, author_name TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL, edited_at TEXT)`,
   `INSERT OR IGNORE INTO team_topics (name,created_by,created_at) VALUES ('General','system','2026-11-11T00:00:00Z'),('Family Game Night','system','2026-11-11T00:00:01Z'),('Sweetheart Dance','system','2026-11-11T00:00:02Z'),('Car Show','system','2026-11-11T00:00:03Z'),('Literacy Night','system','2026-11-11T00:00:04Z')`,
 ];
 let schemaReady = null;
+// Columns added after launch: ALTER fails harmlessly once the column exists.
+const ADDED_COLUMNS = ['ALTER TABLE planning_sections ADD COLUMN field_by TEXT'];
 function ensureSchema(db) {
-  if (!schemaReady) schemaReady = db.batch(SCHEMA.map(s => db.prepare(s))).catch(e => { schemaReady = null; throw e; });
+  if (!schemaReady) schemaReady = db.batch(SCHEMA.map(s => db.prepare(s)))
+    .then(() => Promise.all(ADDED_COLUMNS.map(sql => db.prepare(sql).run().catch(() => null))))
+    .catch(e => { schemaReady = null; throw e; });
   return schemaReady;
 }
 
@@ -100,7 +106,7 @@ async function planGet(env, user) {
   const r = await env.DB.prepare('SELECT * FROM planning_sections').all();
   r.results = r.results.filter(row => user.isOwner || !ownerOnly(row.id));
   const files = await env.DB.prepare(`SELECT f.id,f.section,f.field_key,f.author_id,${NAME('f', 'author_id', 'author_name')} AS author_name,f.name,f.content_type,f.size,f.created_at FROM answer_files f ORDER BY f.created_at`).all();
-  return json({ sections: r.results.map(row => ({ ...row, content: JSON.parse(row.content) })), files: files.results });
+  return json({ sections: r.results.map(({ field_by, ...row }) => ({ ...row, content: JSON.parse(row.content) })), files: files.results });
 }
 async function planPut(request, env, user) {
   const raw = await request.text();
@@ -118,6 +124,48 @@ async function planPut(request, env, user) {
     : await env.DB.prepare('UPDATE planning_sections SET content=?,revision=revision+1,updated_by=?,updated_at=? WHERE id=? AND revision=? RETURNING *').bind(JSON.stringify(content), user.displayName, nowIso(), section, revision).first();
   if (!row) return json({ error: 'Someone else saved this section. Reload the saved version before making your changes again.' }, 409);
   return json({ section: { ...row, content: JSON.parse(row.content) } });
+}
+
+// Save ONE answer. `base` is the value this person last saw; if someone else has
+// changed that same answer since, nothing is saved and the current value comes back.
+async function planPatch(request, env, user) {
+  let p; try { p = await readJson(request, 20000); } catch { return json({ error: 'Invalid answer.' }, 400); }
+  const { section, key, value } = p ?? {}, base = p?.base ?? '';
+  if (ownerOnly(section) && !user.isOwner) return json({ error: 'Invalid planning section.' }, 400);
+  const field = Object.hasOwn(MODEL.sections, section) ? MODEL.sections[section].find(f => f.key === key) : null;
+  if (!field || typeof value !== 'string' || value.length > 6000 || typeof base !== 'string' || (field.options && value !== '' && !field.options.includes(value))) return json({ error: 'Please check your answer.' }, 400);
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const row = await env.DB.prepare('SELECT * FROM planning_sections WHERE id=?').bind(section).first();
+    const content = row ? JSON.parse(row.content) : {}, cur = content[key] ?? '';
+    let fieldBy = {}; try { fieldBy = JSON.parse(row?.field_by || '{}') || {}; } catch { fieldBy = {}; }
+    const strip = r => { const { field_by, ...rest } = r; return { ...rest, content: JSON.parse(r.content) }; };
+    if (cur === value) return json({ section: row ? strip(row) : null, saved: true });
+    if (cur !== base) return json({ conflict: true, current: cur, by: fieldBy[key] || row.updated_by, at: row.updated_at }, 409);
+    if (value === '') delete content[key]; else content[key] = value;
+    fieldBy[key] = user.displayName;
+    const saved = row
+      ? await env.DB.prepare('UPDATE planning_sections SET content=?,field_by=?,revision=revision+1,updated_by=?,updated_at=? WHERE id=? AND revision=? RETURNING *').bind(JSON.stringify(content), JSON.stringify(fieldBy), user.displayName, nowIso(), section, row.revision).first()
+      : await env.DB.prepare('INSERT INTO planning_sections (id,content,field_by,revision,updated_by,updated_at) VALUES (?,?,?,1,?,?) ON CONFLICT(id) DO NOTHING RETURNING *').bind(section, JSON.stringify(content), JSON.stringify(fieldBy), user.displayName, nowIso()).first();
+    if (saved) {
+      if (cur) {
+        try {
+          await env.DB.batch([
+            env.DB.prepare('INSERT INTO answer_history (section,field_key,value,replaced_by,replaced_at) VALUES (?,?,?,?,?)').bind(section, key, cur, user.displayName, nowIso()),
+            env.DB.prepare('DELETE FROM answer_history WHERE section=? AND field_key=? AND id NOT IN (SELECT id FROM answer_history WHERE section=? AND field_key=? ORDER BY id DESC LIMIT 25)').bind(section, key, section, key)]);
+        } catch (e) { console.error('history', e); }
+      }
+      return json({ section: strip(saved), saved: true });
+    }
+    // someone saved a different answer in this section at the same moment: merge again
+  }
+  return json({ error: 'Busy saving. Please try again.' }, 503);
+}
+
+async function planHistory(request, env, user) {
+  const url = new URL(request.url), section = url.searchParams.get('section'), key = url.searchParams.get('key');
+  if ((ownerOnly(section) && !user.isOwner) || !Object.hasOwn(MODEL.sections, section) || !MODEL.sections[section].some(f => f.key === key)) return json({ error: 'Invalid question.' }, 400);
+  const rows = await env.DB.prepare('SELECT value,replaced_by,replaced_at FROM answer_history WHERE section=? AND field_key=? ORDER BY id DESC LIMIT 25').bind(section, key).all();
+  return json({ versions: rows.results });
 }
 
 /* ---------------- comments ---------------- */
@@ -381,13 +429,14 @@ async function handle(request, env) {
       if (method === 'GET') return json({ email: user.email, name: user.displayName, named: user.named, isOwner: user.isOwner, attachments: !!env.BUCKET, version: VERSION });
       if (method === 'PUT') return mePut(request, env, user);
     }
-    if (path === '/api/plan') { if (method === 'GET') return await planGet(env, user); if (method === 'PUT') return await planPut(request, env, user); }
+    if (path === '/api/plan') { if (method === 'GET') return await planGet(env, user); if (method === 'PATCH') return await planPatch(request, env, user); if (method === 'PUT') return await planPut(request, env, user); }
     if (path === '/api/comments') {
       if (method === 'GET') return await commentsGet(request, env, user);
       if (method === 'POST') return await commentsPost(request, env, user);
       if (method === 'PATCH') return await commentsPatch(request, env, user);
       if (method === 'DELETE') return await commentsDelete(request, env, user);
     }
+    if (path === '/api/plan/history' && method === 'GET') return await planHistory(request, env, user);
     if (path === '/api/team') {
       if (method === 'GET') return await teamGet(request, env, user);
       if (method === 'POST') return await teamPost(request, env, user);

@@ -126,3 +126,21 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .event-num{width:30px;height:30px;border-radius:50%;background:#1c2a4b;color:#e2a634;display:grid;place-items:center;font-size:13px;font-weight:600;flex-shrink:0}
 .add-event{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:16px;margin:0 0 22px;border:1.5px dashed #b9c2d6;border-radius:12px;background:#fbfcfe;color:#1c2a4b;font-size:14px}
 .add-event:hover{background:#f1f4fa;border-color:#8e9ab5}
+
+/* autosave */
+#saveState.save-ok{color:#2e6b45}
+#saveState.save-warn{color:#a15c12}
+.conflict{margin-top:6px;background:#fff6e5;border:1px solid #f0d49a;border-radius:8px;padding:10px 12px;font-size:12px;color:#6b4a10}
+.conflict p{margin:4px 0 8px;white-space:pre-wrap}
+.conflict div{display:flex;gap:10px;align-items:center}
+.conflict .primary{min-height:32px;padding:6px 12px}
+
+.autosave-note{display:flex;align-items:flex-start;gap:8px;background:#eef2f9;border:1px solid #d9e0ee;color:#3c4a6b;border-radius:9px;padding:10px 14px;font-size:12px;margin:-10px 0 24px;line-height:1.5}
+.autosave-note svg{margin-top:2px}
+.history-link{font-size:11px!important;color:#6b7590!important;padding:2px 0!important}
+.history-list{background:#f6f8fc;border:1px solid #dfe5f0;border-radius:8px;padding:10px 12px;display:grid;gap:10px}
+.history-head{display:flex;justify-content:space-between;align-items:center;font-size:12px}
+.history-item{border-top:1px solid #e3e8f2;padding-top:8px;display:grid;gap:4px}
+.history-item p{font-size:13px;white-space:pre-wrap;margin:0}
+.history-item small{color:#7a849c;font-size:11px}
+.history-item .quiet{justify-self:start;font-size:12px;color:#1c2a4b;padding:2px 0}

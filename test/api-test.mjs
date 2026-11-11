@@ -100,6 +100,16 @@ ok((await call('ying', '/api/plan')).j.sections.some(x => x.id === 'pro'), 'Pro 
 ok((await call('ying', '/api/comments', J('POST', { requestId: id(), body: 'x', section: 'pro', fieldKey: null, quote: '' }))).s === 400, 'no shared comments on Pro page');
 ok((await af('ying', 'pro', 'vendorsEvidence', 'x.png', png, 'image/png')).s === 400, 'no shared files on Pro page');
 ok((await call('ying', '/api/plan', J('PUT', { section: 'features', content: { vendorsPriority: 'Must Have' }, revision: 0 }))).s === 400, 'Pro features not on client feature page');
+// autosave per field + history
+ok((await call('jimmy', '/api/plan', J('PATCH', { section: 'questions', key: 'timing', value: 'Spring', base: '' }))).s === 200, 'patch one answer');
+ok((await call('jessie', '/api/plan', J('PATCH', { section: 'questions', key: 'volume', value: '10 events', base: '' }))).s === 200, 'patch another answer same section, no conflict');
+let cf = await call('jessie', '/api/plan', J('PATCH', { section: 'questions', key: 'timing', value: 'Fall', base: '' }));
+ok(cf.s === 409 && cf.j.current === 'Spring' && cf.j.by === 'Jimmy T', 'stale base on same answer = conflict ' + JSON.stringify(cf.j));
+ok((await call('jessie', '/api/plan', J('PATCH', { section: 'questions', key: 'timing', value: 'Fall', base: 'Spring' }))).s === 200, 'keep mine with current base');
+const hist = await call('ying', '/api/plan/history?section=questions&key=timing');
+ok(hist.j.versions[0].value === 'Spring' && hist.j.versions[0].replaced_by === 'Jessie', 'history keeps replaced value');
+ok((await call('jessie', '/api/plan/history?section=pro&key=vendorsSignal')).s === 400, 'no history on owner-only page for others');
+ok((await call('jessie', '/api/plan', J('PATCH', { section: 'pro', key: 'vendorsSignal', value: 'Strong signal', base: '' }))).s === 400, 'no patch on owner-only page for others');
 // team chat
 let tg = await call('jessie', '/api/team');
 ok(tg.j.topics.includes('Car Show') && tg.j.readOnly === false, 'team topics seeded');
