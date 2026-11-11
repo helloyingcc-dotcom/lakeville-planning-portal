@@ -75,3 +75,4 @@ img{max-width:100%;display:block}
 .feature.tier-pro{border-color:#e3dbef;background:#fcfbfe}
 .tier-group-pro .tier-head{border-top:1px dashed #d9cfe8;padding-top:24px}
 @media(max-width:650px){.tier-head{flex-direction:column}}
+.owner-note{background:#f3eefa;border:1px solid #e0d6ef;color:#5b3f8c;border-radius:9px;padding:12px 16px;font-size:13px;margin-bottom:22px}

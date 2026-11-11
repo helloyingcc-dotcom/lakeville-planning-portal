@@ -1,5 +1,7 @@
 const MODEL=(()=>{
-const tabs=[['start','Start here'],['events','Current events'],['features','Feature priorities'],['preview','App preview'],['workflow','Workflow & roles'],['questions','Questions & accounting']];
+const tabs=[['start','Start here'],['events','Current events'],['features','Feature priorities'],['preview','App preview'],['workflow','Workflow & roles'],['questions','Questions & accounting'],['pro','Pro tier planning']];
+// Sections only the portal owner (OWNER_EMAILS) can see or change.
+const OWNER_SECTIONS=['pro'];
 // Tier names and prices: change them here only.
 const TIERS={base:{name:'School-Year Essentials',price:'$249 per school year',blurb:'Everything in the plan Lakeville is subscribing to.'},pro:{name:'School-Year Pro',price:'Upgrade pricing to come',blurb:'Optional extras. Tell us what interests you; nothing here is built yet.'}};
 // [key, title, description, tier]  base = included in the subscription, pro = higher tier (not built yet)
@@ -25,16 +27,17 @@ const features=[
 ['reuse','Copy a past event','Start a new event from last year’s details.','pro'],
 ['accounting','Accounting connection','Send event money in and out to your bookkeeping system.','pro']];
 const PRIORITY=['Must Have','Nice to Have','Not Sure'];
-const INTEREST=['Very interested','Maybe later','Not needed'];
+const SIGNAL=['Strong signal','Some signal','No signal yet'];
 const f=(key,label,hint)=>({key,label,hint});
 const steps=['Plan the event','Review and publish','Invite families','Register and pay if needed','Fill volunteer shifts','Prepare and remind','Run the event and check in','Close, report and reuse'];
 const sections={
 start:[f('completedBy','Who is contributing?','Names or PTA roles are enough.'),f('firstEvent','Which event should we model first?'),f('goal','What is the main improvement you want?')],
 events:[...[0,1,2].map(i=>[f(`event${i}Name`,`Event ${i+1}: name`),f(`event${i}Process`,'How do you manage it today?','Tools, sign-ups, payments and communication.'),f(`event${i}Pain`,'What is the hardest part?'),f(`event${i}Better`,'What would make it easier?'),f(`event${i}Confirmed`,'Who confirmed these details?')]).flat(),f('tools','Tools Lakeville actually uses','Include what each tool does and whether you want to keep it.'),f('moreEvents','Other events or details')],
-features:[...features.flatMap(([id,name,,tier])=>[{key:id+'Priority',label:name+(tier==='pro'?' (Pro interest)':' (priority)'),options:tier==='pro'?INTEREST:PRIORITY},f(id+'Notes',name+' notes')]),f('additional','Anything else you would like?','Requests outside your plan are reviewed and may be offered in a higher tier.')],
+features:[...features.filter(x=>x[3]==='base').flatMap(([id,name])=>[{key:id+'Priority',label:name+' (priority)',options:PRIORITY},f(id+'Notes',name+' notes')]),f('additional','Anything else you would like?','Tell us about anything else you need. We’ll review requests outside your plan separately.')],
+pro:[...features.filter(x=>x[3]==='pro').flatMap(([id,name])=>[{key:id+'Signal',label:name+' (signal)',options:SIGNAL},f(id+'Evidence',name+': evidence from Lakeville','Quote or summarise what they asked for, and where (section, question or comment).')]),f('newIdeas','New Pro ideas from Lakeville’s answers','Anything they asked for that isn’t in the plan or the list above.'),f('proPrice','Draft Pro price'),f('proNotes','Notes')],
 preview:[f('works','What works well in this example?'),f('changes','What would you change or remove?'),f('missing','What is missing?')],
 workflow:[f('event','Real event to describe'),...steps.map((s,i)=>f('step'+i,s,'Describe Lakeville today and how you would improve this step.')),f('exceptions','What happens when something changes?','Full event, cancellation, failed payment, walk-in or missing volunteer.'),f('lead','PTA lead / event organizer','Who plans events? Can they publish or do they need approval?'),f('admin','App administrator','Who manages access, approvals and officer handover?'),f('volunteer','Volunteer','What may they see or change? Who may check families in?'),f('parent','Parent / guardian','What should they manage for their own family?'),f('sensitive','Information and permissions','Who may see family details, export lists and approve refunds?')],
 questions:[f('firstVersion','Which features in your plan matter most for your first event?'),f('volume','How many events and families should we plan for?'),f('platform','How should people access it?','Mobile-friendly website, app-store download or not sure?'),f('registration','How do registrations work?','By family or individual child? Are guests and walk-ins allowed?'),f('communication','How do you communicate with families today?'),f('timing','Is there a target event or launch date?'),f('decision','Who will review the concept and approve the scope?'),f('success','What would make the first event a success?'),f('accountingTools','What do you use for bookkeeping and payments today?'),{key:'accountingNeed',label:'What does “accounting together” mean?',options:['Show event totals','Sync payments, fees and refunds','Manage full PTA bookkeeping','Not Sure']},f('pricingCore','What accounting functions in DBY’s existing system would be useful?','Describe what already exists or mark Not Sure. Integration is not connected in this portal.'),f('financialOwner','Who reconciles payments and approves refunds?'),f('financialData','What should flow between the systems?','For example event reference, transaction reference, amount, fee, refund and payout status.'),f('retention','What information must be kept, and for how long?'),f('open','Other questions or ideas')]
 };
-return {tabs,features,steps,sections,PRIORITY,INTEREST,TIERS,INTRO_KEY:'intro'};
+return {tabs,features,steps,sections,PRIORITY,SIGNAL,TIERS,OWNER_SECTIONS,INTRO_KEY:'intro'};
 })();

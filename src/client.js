@@ -1,8 +1,10 @@
 /* Lakeville PTA planning portal – browser code (no framework). */
 (() => {
 'use strict';
-const {tabs, features, steps, sections, PRIORITY, INTEREST, TIERS, INTRO_KEY} = MODEL;
-const descriptions = {start:'A shared starting point for Lakeville and DBY.',events:'Tell us how Lakeville runs events today. Start with one or two you know well.',features:'See what’s included in your plan and what’s available as an upgrade.',preview:'Explore one possible direction, then tell us what fits Lakeville.',workflow:'Walk us through a real event and decide who needs access.',questions:'Help us shape the first version and understand the accounting needs.'};
+const {tabs: allTabs, features, steps, sections, PRIORITY, SIGNAL, TIERS, OWNER_SECTIONS, INTRO_KEY} = MODEL;
+const ownerOnly = id => OWNER_SECTIONS.includes(id);
+let tabs = allTabs.filter(t => !ownerOnly(t[0]));
+const descriptions = {start:'A shared starting point for Lakeville and DBY.',events:'Tell us how Lakeville runs events today. Start with one or two you know well.',features:'See what’s included in your plan and what’s available as an upgrade.',preview:'Explore one possible direction, then tell us what fits Lakeville.',workflow:'Walk us through a real event and decide who needs access.',questions:'Help us shape the first version and understand the accounting needs.',pro:'Only you can see this page. Sort what Lakeville asks for into the higher tier as their answers come in.'};
 
 /* ---------- tiny DOM helpers ---------- */
 const ICONS = {
@@ -122,9 +124,9 @@ function field(f) {
   control.value = current()[f.key] || '';
   return h('div', { class: 'field' },
     h('div', { class: 'field-heading' }, h('label', { for: id }, f.label),
-      h('button', { class: 'comment-anchor', type: 'button', 'data-anchor': f.key, 'aria-label': 'Comment on ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => comment(f) }, icon('message', 13), count ? String(count) : 'Comment')),
+      ownerOnly(tab) ? null : h('button', { class: 'comment-anchor', type: 'button', 'data-anchor': f.key, 'aria-label': 'Comment on ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => comment(f) }, icon('message', 13), count ? String(count) : 'Comment')),
     f.hint ? h('small', null, f.hint) : null, control,
-    f.options ? null : h('div', { class: 'answer-files', id: 'files-' + fieldId(tab, f.key) }, fileArea(tab, f.key)));
+    f.options || ownerOnly(tab) ? null : h('div', { class: 'answer-files', id: 'files-' + fieldId(tab, f.key) }, fileArea(tab, f.key)));
 }
 const fileUrl = id => '/api/answer-files?id=' + id;
 const answerImages = new Map();
@@ -193,17 +195,25 @@ function tabBody(tab) {
     [0, 1, 2].map(i => h('section', { class: 'panel' }, h('h2', null, 'Event ' + (i + 1)), fields(sec.slice(i * 5, i * 5 + 5)))),
     h('section', { class: 'panel' }, h('h2', null, 'Your tools & other events'), fields(sec.slice(15)))];
   if (tab === 'features') {
-    const card = ([id, title, desc, tier]) => h('section', { class: 'feature tier-' + tier },
-      h('div', null, h('span', { class: 'tier-badge ' + tier }, tier === 'pro' ? 'Pro' : 'Included'), h('h2', null, title), h('p', null, desc)),
-      h('div', null, field({ key: id + 'Priority', label: tier === 'pro' ? 'Interest' : 'Priority for your first event', options: tier === 'pro' ? INTEREST : PRIORITY }), field({ key: id + 'Notes', label: tier === 'pro' ? 'How would you use it?' : 'What would Lakeville need?', hint: 'Optional notes' })));
-    const group = (tier, key) => h('section', { class: 'tier-group tier-group-' + tier },
-      h('div', { class: 'tier-head' }, h('div', null, h('span', { class: 'eyebrow' }, tier === 'pro' ? 'HIGHER TIER · NOT INCLUDED' : 'YOUR PLAN'), h('h2', null, TIERS[tier].name), h('p', null, TIERS[tier].blurb)), h('span', { class: 'tier-price ' + tier }, TIERS[tier].price)),
-      h('div', { class: 'prioritykey' }, key.map(([a, b]) => h('span', null, h('strong', null, a), ' ' + b))),
-      h('div', { class: 'featurelist' }, features.filter(x => x[3] === tier).map(card)));
+    const card = ([id, title, desc]) => h('section', { class: 'feature' },
+      h('div', null, h('span', { class: 'tier-badge base' }, 'Included'), h('h2', null, title), h('p', null, desc)),
+      h('div', null, field({ key: id + 'Priority', label: 'Priority for your first event', options: PRIORITY }), field({ key: id + 'Notes', label: 'What would Lakeville need?', hint: 'Optional notes' })));
     return [
-      group('base', [['Must Have', 'Needed for your first event'], ['Nice to Have', 'Can wait'], ['Not Sure', 'Discuss together']]),
-      group('pro', [['Very interested', 'Worth an upgrade'], ['Maybe later', 'Not now'], ['Not needed', 'Skip it']]),
+      h('div', { class: 'tier-head' }, h('div', null, h('span', { class: 'eyebrow' }, 'YOUR PLAN'), h('h2', null, TIERS.base.name), h('p', null, TIERS.base.blurb)), h('span', { class: 'tier-price base' }, TIERS.base.price)),
+      h('div', { class: 'prioritykey' }, [['Must Have', 'Needed for your first event'], ['Nice to Have', 'Can wait'], ['Not Sure', 'Discuss together']].map(([a, b]) => h('span', null, h('strong', null, a), ' ' + b))),
+      h('div', { class: 'featurelist' }, features.filter(x => x[3] === 'base').map(card)),
       h('section', { class: 'panel' }, field(sec.at(-1)))];
+  }
+  if (tab === 'pro') {
+    const pro = features.filter(x => x[3] === 'pro');
+    return [
+      h('div', { class: 'owner-note' }, '🔒 Only you can see this page. Jessie and Jimmy never see the Pro tier, its fields or your notes.'),
+      h('div', { class: 'tier-head' }, h('div', null, h('span', { class: 'eyebrow' }, 'HIGHER TIER · NOT BUILT'), h('h2', null, TIERS.pro.name), h('p', null, 'Mark how strongly Lakeville’s answers point to each feature. Strong signals across enough features make the case for building Pro.')), h('span', { class: 'tier-price pro' }, TIERS.pro.price)),
+      h('div', { class: 'prioritykey' }, [['Strong signal', 'They clearly asked for it'], ['Some signal', 'Hinted at it'], ['No signal yet', 'Not mentioned']].map(([a, b]) => h('span', null, h('strong', null, a), ' ' + b))),
+      h('div', { class: 'featurelist' }, pro.map(([id, title, desc]) => h('section', { class: 'feature tier-pro' },
+        h('div', null, h('span', { class: 'tier-badge pro' }, 'Pro'), h('h2', null, title), h('p', null, desc)),
+        h('div', null, field({ key: id + 'Signal', label: 'Signal from Lakeville', options: SIGNAL }), field({ key: id + 'Evidence', label: 'Evidence', hint: 'What they said and where' }))))),
+      h('section', { class: 'panel' }, h('h2', null, 'Pricing & ideas'), fields(sec.slice(-3)))];
   }
   if (tab === 'preview') return [
     h('div', { class: 'previewintro' }, h('p', null, 'Try Events, Volunteers and My Sign-ups. Switch “Preview as” to see PTA Admin. Sample sign-ups stay inside this demo.'), h('a', { href: '/app-preview.html', target: '_blank', rel: 'noreferrer' }, 'Open preview in a new tab ↗')),
@@ -219,7 +229,7 @@ function tabBody(tab) {
   }
   return [
     h('section', { class: 'panel' }, h('h2', null, 'Before we define the first version'), fields(sec.slice(0, 8))),
-    h('section', { class: 'panel accounting' }, h('span', { class: 'eyebrow' }, 'A FUTURE CONNECTION · PRO TIER'), h('h2', null, 'Events and accounting, together?'),
+    h('section', { class: 'panel accounting' }, h('span', { class: 'eyebrow' }, 'A FUTURE CONNECTION'), h('h2', null, 'Events and accounting, together?'),
       h('p', null, 'The Events App can remain a separate project while a future connection links registrations and transactions. We need to confirm which system owns the financial records.'), fields(sec.slice(8)))];
 }
 function nameBar() {
@@ -247,9 +257,9 @@ function renderMain() {
     h('div', { class: 'heading intro-anchor', id: fieldId(tab, INTRO_KEY), tabindex: '-1' },
       h('div', null, h('h1', null, titleFor(tab)), h('p', null, descriptions[tab])),
       h('div', { class: 'heading-side' }, h('span', { class: 'statusbadge' }, 'Discovery stage'),
-        h('button', { class: introCount ? 'comment-anchor intro-comment has-comments' : 'comment-anchor intro-comment', type: 'button', id: 'introComment', 'aria-label': 'Comment on the page introduction' + (introCount ? ` (${introCount} open)` : ''), onclick: commentIntro }, icon('message', 13), introCount ? introCount + ' on intro' : 'Comment on intro'))),
+        ownerOnly(tab) ? null : h('button', { class: introCount ? 'comment-anchor intro-comment has-comments' : 'comment-anchor intro-comment', type: 'button', id: 'introComment', 'aria-label': 'Comment on the page introduction' + (introCount ? ` (${introCount} open)` : ''), onclick: commentIntro }, icon('message', 13), introCount ? introCount + ' on intro' : 'Comment on intro'))),
     h('div', { class: 'context' }, h('span', { class: 'dot' }), h('span', null, 'Examples are illustrative. Lakeville’s confirmed details belong in the answer fields.'),
-      h('button', { class: 'comment-anchor section-comment', onclick: () => comment() }, icon('message', 14), 'Discuss this section')),
+      ownerOnly(tab) ? null : h('button', { class: 'comment-anchor section-comment', onclick: () => comment() }, icon('message', 14), 'Discuss this section')),
     h('div', { id: 'incoming' }),
     !S.loaded && !S.error ? h('p', { role: 'status' }, 'Loading shared answers…') : null,
     S.error ? h('div', { class: 'error', role: 'alert' }, S.error + ' ', h('button', { class: 'quiet', onclick: reload }, 'Reload saved answers')) : null,
@@ -386,7 +396,7 @@ function updateCounts(counts) {
 }
 
 /* ---------- comments panel ---------- */
-const listSection = () => C.scope === 'current' ? S.tab : C.scope === 'general' ? 'general' : 'all';
+const listSection = () => C.scope === 'current' ? (ownerOnly(S.tab) ? 'all' : S.tab) : C.scope === 'general' ? 'general' : 'all';
 const target = () => C.newAnchor || { section: C.scope === 'general' ? 'general' : S.tab, fieldKey: null, quote: '' };
 const draftKey = () => C.active ? 'reply:' + C.active.id : 'new:' + target().section + ':' + (target().fieldKey || '');
 function onSectionChange(force) {
@@ -617,6 +627,6 @@ window.addEventListener('beforeunload', e => {
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { syncPlan(); pollList(); pollThread(); } });
 setInterval(() => { syncPlan(); pollList(); pollThread(); }, 2000);
 renderShell();
-api('/api/me').then(me => { S.me = me; renderMain(); renderPanel(); }).catch(e => { S.error = errMsg(e, 'Could not check your sign-in.'); renderMain(); });
+api('/api/me').then(me => { S.me = me; tabs = me.isOwner ? allTabs : allTabs.filter(t => !ownerOnly(t[0])); renderNav(); renderMain(); renderPanel(); }).catch(e => { S.error = errMsg(e, 'Could not check your sign-in.'); renderMain(); });
 load();
 })();

@@ -7,6 +7,7 @@
  *   BUCKET             R2 bucket binding (optional) – enables "Attach examples".
  *   ACCESS_TEAM_DOMAIN Cloudflare Access team domain, e.g. "lakeville" or "lakeville.cloudflareaccess.com".
  *   ACCESS_AUD         Cloudflare Access "Application Audience (AUD) tag".
+ *   OWNER_EMAILS       Comma-separated emails that can see owner-only pages (e.g. Pro tier planning).
  * Sign-in is handled by Cloudflare Access (email one-time code). This file only checks the signed token.
  */
 /*__MODEL__*/
@@ -17,7 +18,8 @@ const VERSION = /*__VERSION__*/"dev";
 
 const json = (v, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 const uuid = v => typeof v === 'string' && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(v);
-const validSection = s => typeof s === 'string' && (s === 'general' || Object.hasOwn(MODEL.sections, s));
+const ownerOnly = s => MODEL.OWNER_SECTIONS.includes(s);
+const validSection = s => typeof s === 'string' && (s === 'general' || (Object.hasOwn(MODEL.sections, s) && !ownerOnly(s)));
 const nowIso = () => new Date().toISOString();
 const SECURITY_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'SAMEORIGIN' };
 
@@ -86,12 +88,14 @@ async function getUser(request, env) {
   try { email = await verifyAccess(token, env); } catch { return { error: 'signin_unavailable' }; }
   if (!email) return null;
   const row = await env.DB.prepare('SELECT name FROM people WHERE email=?').bind(email).first();
-  return { userId: email, email, displayName: row?.name || nameFromEmail(email), named: !!row };
+  const owners = String(env.OWNER_EMAILS || '').toLowerCase().split(/[\s,;]+/).filter(Boolean);
+  return { userId: email, email, displayName: row?.name || nameFromEmail(email), named: !!row, isOwner: owners.includes(email) };
 }
 
 /* ---------------- planning answers ---------------- */
-async function planGet(env) {
+async function planGet(env, user) {
   const r = await env.DB.prepare('SELECT * FROM planning_sections').all();
+  r.results = r.results.filter(row => user.isOwner || !ownerOnly(row.id));
   const files = await env.DB.prepare(`SELECT f.id,f.section,f.field_key,f.author_id,${NAME('f', 'author_id', 'author_name')} AS author_name,f.name,f.content_type,f.size,f.created_at FROM answer_files f ORDER BY f.created_at`).all();
   return json({ sections: r.results.map(row => ({ ...row, content: JSON.parse(row.content) })), files: files.results });
 }
@@ -100,6 +104,7 @@ async function planPut(request, env, user) {
   if (raw.length > 65000) return json({ error: 'This response is too large.' }, 413);
   let body; try { body = JSON.parse(raw); } catch { return json({ error: 'Invalid response.' }, 400); }
   const { section, content, revision } = body ?? {};
+  if (ownerOnly(section) && !user.isOwner) return json({ error: 'Invalid planning section.' }, 400);
   if (!Object.hasOwn(MODEL.sections, section) || !Number.isSafeInteger(revision) || revision < 0 || !content || typeof content !== 'object' || Array.isArray(content)) return json({ error: 'Invalid planning section.' }, 400);
   for (const [key, value] of Object.entries(content)) {
     const field = MODEL.sections[section].find(f => f.key === key);
@@ -150,7 +155,7 @@ async function commentsPost(request, env, user) {
     if (!results[0].meta.changes) return json({ error: 'This discussion is resolved or an attachment is unavailable. Reopen it or remove the unavailable file before retrying.' }, 409);
   } else {
     const fk = p.fieldKey;
-    const fieldOk = fk == null || (typeof fk === 'string' && ((fk === MODEL.INTRO_KEY && p.section !== 'general') || MODEL.sections[p.section]?.some(f => f.key === fk)));
+    const fieldOk = fk == null || (typeof fk === 'string' && !ownerOnly(p.section) && ((fk === MODEL.INTRO_KEY && p.section !== 'general') || MODEL.sections[p.section]?.some(f => f.key === fk)));
     if (!validSection(p.section) || !fieldOk || typeof p.quote !== 'string' || p.quote.length > 500) return json({ error: 'Choose a valid section or question.' }, 400);
     await DB.batch([
       DB.prepare(`INSERT INTO comment_threads (id,section,field_key,quote,resolved,revision,created_by,created_name,created_at,updated_at) SELECT ?,?,?,?,0,1,?,?,?,? WHERE ${guard} ON CONFLICT(id) DO NOTHING`).bind(p.requestId, p.section, fk || null, p.quote, user.userId, user.displayName, now, now, ...args),
@@ -249,7 +254,7 @@ async function answerFilePost(request, env, user) {
   if (Number(request.headers.get('content-length')) > LIMIT + 100000) return json({ error: 'Each file must be 20 MB or smaller.' }, 413);
   let form; try { form = await request.formData(); } catch { return json({ error: 'Choose a file to upload.' }, 400); }
   const section = String(form.get('section') || ''), fieldKey = String(form.get('fieldKey') || '');
-  if (!Object.hasOwn(MODEL.sections, section) || !MODEL.sections[section].some(f => f.key === fieldKey)) return json({ error: 'Choose a valid question.' }, 400);
+  if (ownerOnly(section) || !Object.hasOwn(MODEL.sections, section) || !MODEL.sections[section].some(f => f.key === fieldKey)) return json({ error: 'Choose a valid question.' }, 400);
   const count = await env.DB.prepare('SELECT count(*) AS n FROM answer_files WHERE section=? AND field_key=?').bind(section, fieldKey).first('n');
   if (count >= MAX_FILES_PER_QUESTION) return json({ error: `This question already has ${MAX_FILES_PER_QUESTION} files. Remove one before adding another.` }, 409);
   const up = await readUpload(request, form, ANSWER_EXTS);
@@ -320,10 +325,10 @@ async function handle(request, env) {
     if (path === '/' && method === 'GET') return page(HTML);
     if (path === '/app-preview.html' && method === 'GET') return page(PREVIEW_HTML);
     if (path === '/api/me') {
-      if (method === 'GET') return json({ email: user.email, name: user.displayName, named: user.named, attachments: !!env.BUCKET, version: VERSION });
+      if (method === 'GET') return json({ email: user.email, name: user.displayName, named: user.named, isOwner: user.isOwner, attachments: !!env.BUCKET, version: VERSION });
       if (method === 'PUT') return mePut(request, env, user);
     }
-    if (path === '/api/plan') { if (method === 'GET') return await planGet(env); if (method === 'PUT') return await planPut(request, env, user); }
+    if (path === '/api/plan') { if (method === 'GET') return await planGet(env, user); if (method === 'PUT') return await planPut(request, env, user); }
     if (path === '/api/comments') {
       if (method === 'GET') return await commentsGet(request, env, user);
       if (method === 'POST') return await commentsPost(request, env, user);

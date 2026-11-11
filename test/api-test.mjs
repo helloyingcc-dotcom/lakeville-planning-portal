@@ -91,4 +91,13 @@ ok((await call('ying', '/api/answer-files?id=' + a1.j.file.id, { method: 'DELETE
 ok((await call('jessie', '/api/answer-files?id=' + a1.j.file.id, { method: 'DELETE' })).s === 200, 'uploader removes own file');
 ok((await call('ying', '/api/answer-files?id=' + a1.j.file.id)).s === 404, 'removed file gone');
 ok((await call('ying', '/api/plan')).j.files.length === 1, 'list updated after removal');
+// owner-only Pro planning
+ok((await call('ying', '/api/me')).j.isOwner === true && (await call('jessie', '/api/me')).j.isOwner === false, 'owner flag');
+ok((await call('jessie', '/api/plan', J('PUT', { section: 'pro', content: { vendorsSignal: 'Strong signal' }, revision: 0 }))).s === 400, 'non-owner cannot save Pro');
+ok((await call('ying', '/api/plan', J('PUT', { section: 'pro', content: { vendorsSignal: 'Strong signal', vendorsEvidence: 'Asked about receipts' }, revision: 0 }))).s === 200, 'owner saves Pro');
+ok(!(await call('jessie', '/api/plan')).j.sections.some(x => x.id === 'pro'), 'Pro hidden from non-owner');
+ok((await call('ying', '/api/plan')).j.sections.some(x => x.id === 'pro'), 'Pro visible to owner');
+ok((await call('ying', '/api/comments', J('POST', { requestId: id(), body: 'x', section: 'pro', fieldKey: null, quote: '' }))).s === 400, 'no shared comments on Pro page');
+ok((await af('ying', 'pro', 'vendorsEvidence', 'x.png', png, 'image/png')).s === 400, 'no shared files on Pro page');
+ok((await call('ying', '/api/plan', J('PUT', { section: 'features', content: { vendorsPriority: 'Must Have' }, revision: 0 }))).s === 400, 'Pro features not on client feature page');
 console.log(`API tests: ${pass} passed, ${fail} failed`);

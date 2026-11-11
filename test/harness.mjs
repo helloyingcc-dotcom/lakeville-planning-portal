@@ -31,7 +31,7 @@ export function token(email, { aud = AUD, exp = Math.floor(Date.now() / 1000) + 
   const head = b64({ alg: 'RS256', kid: 'k1', typ: 'JWT' }), body = b64({ email, aud: [aud], iss: TEAM, exp, iat: Math.floor(Date.now() / 1000) });
   return head + '.' + body + '.' + crypto.sign('sha256', Buffer.from(head + '.' + body), privateKey).toString('base64url');
 }
-const env = { DB, BUCKET: process.env.NO_BUCKET ? undefined : BUCKET, ACCESS_TEAM_DOMAIN: 'lakeville', ACCESS_AUD: AUD };
+const env = { OWNER_EMAILS: 'ying@example.com', DB, BUCKET: process.env.NO_BUCKET ? undefined : BUCKET, ACCESS_TEAM_DOMAIN: 'lakeville', ACCESS_AUD: AUD };
 http.createServer(async (req, res) => {
   const url = 'http://localhost:' + port + req.url;
   const hasBody = !['GET', 'HEAD'].includes(req.method);
