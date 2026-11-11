@@ -207,6 +207,12 @@ function eventCards(sec) {
     }),
     n < MAX_EVENTS ? h('button', { class: 'add-event', type: 'button', onclick: () => { S.eventSlots = n + 1; renderMain(); setTimeout(() => { const el = $(fieldId('events', 'event' + n + 'Name')); el?.scrollIntoView({ behavior: 'smooth', block: 'center' }); el?.focus({ preventScroll: true }); }, 50); } }, icon('plus', 16), 'Add another event') : h('p', { class: 'muted' }, 'That’s the most events this page holds. Add others under “Anything else about your events?”.')];
 }
+const DEVICES = [['phone', 'Phone', '390 × 844'], ['tablet', 'Tablet', '820 × 1180'], ['desktop', 'Desktop', 'Full width']];
+function devicePicker() {
+  return h('div', { class: 'device-picker', role: 'group', 'aria-label': 'Preview size' },
+    DEVICES.map(([id, label, size]) => h('button', { type: 'button', class: 'device-btn', 'aria-pressed': String((S.device || 'desktop') === id), onclick: () => { S.device = id; const st = document.querySelector('.device-stage'); if (st) st.className = 'device-stage device-' + id; document.querySelectorAll('.device-btn').forEach(b => b.setAttribute('aria-pressed', String(b.textContent.startsWith(label)))); } }, label, h('small', null, size))),
+    h('button', { type: 'button', class: 'quiet', onclick: () => { const f = $('appframe'); if (f) f.src = '/app-preview.html'; } }, icon('refresh', 13), 'Restart demo'));
+}
 function tabBody(tab) {
   const sec = sections[tab];
   if (tab === 'start') return [
@@ -246,7 +252,8 @@ function tabBody(tab) {
   if (tab === 'preview') return [
     h('div', { class: 'owner-note' }, '🔒 Only you can see this page. Jessie and Jimmy don’t see the App preview until you choose to share it.'),
     h('div', { class: 'previewintro' }, h('p', null, 'Try Events, Volunteers and My Sign-ups. Switch “Preview as” to see PTA Admin. Sample sign-ups stay inside this demo.'), h('a', { href: '/app-preview.html', target: '_blank', rel: 'noreferrer' }, 'Open preview in a new tab ↗')),
-    h('iframe', { title: 'Illustrative Lakeville Events App', src: '/app-preview.html', class: 'appframe' }),
+    devicePicker(),
+    h('div', { class: 'device-stage device-' + (S.device || 'desktop') }, h('div', { class: 'device-frame' }, h('iframe', { title: 'Illustrative Lakeville Events App', src: '/app-preview.html', class: 'appframe', id: 'appframe' }))),
     h('section', { class: 'panel' }, h('h2', null, 'Your notes on this draft'), fields(sec))];
   if (tab === 'workflow') {
     const journey = ['PTA lead creates details and capacity.', 'An administrator approves publication.', 'PTA shares the event link.', 'Parents register their family.', 'Volunteers choose time slots.', 'PTA checks tasks and sends updates.', 'Assigned helpers mark arrivals.', 'PTA reviews attendance and financial follow-up.'];
