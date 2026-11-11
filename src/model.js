@@ -1,5 +1,5 @@
 const MODEL=(()=>{
-const tabs=[['start','Start here'],['events','Current events'],['features','Feature priorities'],['workflow','Workflow & roles'],['questions','Questions & accounting'],['preview','App preview'],['pro','Pro tier planning']];
+const tabs=[['start','Start here'],['events','Current events'],['workflow','Workflow & roles'],['features','Feature priorities'],['questions','Questions & accounting'],['preview','App preview'],['pro','Pro tier planning']];
 // Sections only the portal owner (OWNER_EMAILS) can see or change.
 const OWNER_SECTIONS=['preview','pro'];
 // Tier names and prices: change them here only.
