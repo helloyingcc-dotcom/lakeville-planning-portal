@@ -424,7 +424,7 @@ async function handle(request, env) {
   }
   try {
     if (path === '/' && method === 'GET') return page(HTML);
-    if (path === '/app-preview.html' && method === 'GET') return page(PREVIEW_HTML);
+    if (path === '/app-preview.html' && method === 'GET') return user.isOwner ? page(PREVIEW_HTML) : json({ error: 'Not found.' }, 404);
     if (path === '/api/me') {
       if (method === 'GET') return json({ email: user.email, name: user.displayName, named: user.named, isOwner: user.isOwner, attachments: !!env.BUCKET, version: VERSION });
       if (method === 'PUT') return mePut(request, env, user);

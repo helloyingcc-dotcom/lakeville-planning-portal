@@ -20,7 +20,8 @@ ok((await call('jessie', '/api/me', J('PUT', { name: 'Jessie' }))).j.name === 'J
 ok((await call('jessie', '/api/me', { method: 'PUT', body: JSON.stringify({ name: 'X' }), headers: { Origin: 'https://evil.example' } })).s === 403, 'cross-origin write blocked');
 const page = await call('ying', '/');
 ok(page.s === 200 && (await page.r.text()).includes('<div id="app">'), 'page served');
-ok((await (await call('ying', '/app-preview.html')).r.text()).includes('lakeville-concept'), 'preview served');
+ok((await (await call('ying', '/app-preview.html')).r.text()).includes('lakeville-concept'), 'preview served to owner');
+ok((await call('jessie', '/app-preview.html')).s === 404, 'preview hidden from Lakeville');
 
 // planning answers
 ok((await call('ying', '/api/plan', J('PUT', { section: 'start', content: { goal: 'Easier sign-ups' }, revision: 0 }))).s === 200, 'first save');
