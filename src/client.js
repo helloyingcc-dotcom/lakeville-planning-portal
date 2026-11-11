@@ -1,8 +1,8 @@
 /* Lakeville PTA planning portal – browser code (no framework). */
 (() => {
 'use strict';
-const {tabs, features, steps, sections, PRIORITY, INTRO_KEY} = MODEL;
-const descriptions = {start:'A shared starting point for Lakeville and DBY.',events:'Tell us how Lakeville runs events today. Start with one or two you know well.',features:'Choose what matters for the first version. You can leave anything undecided.',preview:'Explore one possible direction, then tell us what fits Lakeville.',workflow:'Walk us through a real event and decide who needs access.',questions:'Help us shape the first version and understand the accounting needs.'};
+const {tabs, features, steps, sections, PRIORITY, INTEREST, TIERS, INTRO_KEY} = MODEL;
+const descriptions = {start:'A shared starting point for Lakeville and DBY.',events:'Tell us how Lakeville runs events today. Start with one or two you know well.',features:'See what’s included in your plan and what’s available as an upgrade.',preview:'Explore one possible direction, then tell us what fits Lakeville.',workflow:'Walk us through a real event and decide who needs access.',questions:'Help us shape the first version and understand the accounting needs.'};
 
 /* ---------- tiny DOM helpers ---------- */
 const ICONS = {
@@ -124,7 +124,7 @@ function field(f) {
     h('div', { class: 'field-heading' }, h('label', { for: id }, f.label),
       h('button', { class: 'comment-anchor', type: 'button', 'data-anchor': f.key, 'aria-label': 'Comment on ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => comment(f) }, icon('message', 13), count ? String(count) : 'Comment')),
     f.hint ? h('small', null, f.hint) : null, control,
-    h('div', { class: 'answer-files', id: 'files-' + fieldId(tab, f.key) }, fileArea(tab, f.key)));
+    f.options ? null : h('div', { class: 'answer-files', id: 'files-' + fieldId(tab, f.key) }, fileArea(tab, f.key)));
 }
 const fileUrl = id => '/api/answer-files?id=' + id;
 const answerImages = new Map();
@@ -192,11 +192,19 @@ function tabBody(tab) {
       h('p', null, 'These are examples from the planning draft, not Lakeville-confirmed events or tools.')),
     [0, 1, 2].map(i => h('section', { class: 'panel' }, h('h2', null, 'Event ' + (i + 1)), fields(sec.slice(i * 5, i * 5 + 5)))),
     h('section', { class: 'panel' }, h('h2', null, 'Your tools & other events'), fields(sec.slice(15)))];
-  if (tab === 'features') return [
-    h('div', { class: 'prioritykey' }, h('span', null, h('strong', null, 'Must Have'), ' Needed in the first version'), h('span', null, h('strong', null, 'Nice to Have'), ' Can wait'), h('span', null, h('strong', null, 'Not Sure'), ' Discuss together')),
-    h('div', { class: 'featurelist' }, features.map(([id, title, desc]) => h('section', { class: 'feature' }, h('div', null, h('h2', null, title), h('p', null, desc)),
-      h('div', null, field({ key: id + 'Priority', label: 'PTA priority', options: PRIORITY }), field({ key: id + 'Notes', label: 'What would Lakeville need?', hint: 'Optional notes or changes' }))))),
-    h('section', { class: 'panel' }, field(sec.at(-1)))];
+  if (tab === 'features') {
+    const card = ([id, title, desc, tier]) => h('section', { class: 'feature tier-' + tier },
+      h('div', null, h('span', { class: 'tier-badge ' + tier }, tier === 'pro' ? 'Pro' : 'Included'), h('h2', null, title), h('p', null, desc)),
+      h('div', null, field({ key: id + 'Priority', label: tier === 'pro' ? 'Interest' : 'Priority for your first event', options: tier === 'pro' ? INTEREST : PRIORITY }), field({ key: id + 'Notes', label: tier === 'pro' ? 'How would you use it?' : 'What would Lakeville need?', hint: 'Optional notes' })));
+    const group = (tier, key) => h('section', { class: 'tier-group tier-group-' + tier },
+      h('div', { class: 'tier-head' }, h('div', null, h('span', { class: 'eyebrow' }, tier === 'pro' ? 'HIGHER TIER · NOT INCLUDED' : 'YOUR PLAN'), h('h2', null, TIERS[tier].name), h('p', null, TIERS[tier].blurb)), h('span', { class: 'tier-price ' + tier }, TIERS[tier].price)),
+      h('div', { class: 'prioritykey' }, key.map(([a, b]) => h('span', null, h('strong', null, a), ' ' + b))),
+      h('div', { class: 'featurelist' }, features.filter(x => x[3] === tier).map(card)));
+    return [
+      group('base', [['Must Have', 'Needed for your first event'], ['Nice to Have', 'Can wait'], ['Not Sure', 'Discuss together']]),
+      group('pro', [['Very interested', 'Worth an upgrade'], ['Maybe later', 'Not now'], ['Not needed', 'Skip it']]),
+      h('section', { class: 'panel' }, field(sec.at(-1)))];
+  }
   if (tab === 'preview') return [
     h('div', { class: 'previewintro' }, h('p', null, 'Try Events, Volunteers and My Sign-ups. Switch “Preview as” to see PTA Admin. Sample sign-ups stay inside this demo.'), h('a', { href: '/app-preview.html', target: '_blank', rel: 'noreferrer' }, 'Open preview in a new tab ↗')),
     h('iframe', { title: 'Illustrative Lakeville Events App', src: '/app-preview.html', class: 'appframe' }),
@@ -211,7 +219,7 @@ function tabBody(tab) {
   }
   return [
     h('section', { class: 'panel' }, h('h2', null, 'Before we define the first version'), fields(sec.slice(0, 8))),
-    h('section', { class: 'panel accounting' }, h('span', { class: 'eyebrow' }, 'A FUTURE CONNECTION'), h('h2', null, 'Events and accounting, together?'),
+    h('section', { class: 'panel accounting' }, h('span', { class: 'eyebrow' }, 'A FUTURE CONNECTION · PRO TIER'), h('h2', null, 'Events and accounting, together?'),
       h('p', null, 'The Events App can remain a separate project while a future connection links registrations and transactions. We need to confirm which system owns the financial records.'), fields(sec.slice(8)))];
 }
 function nameBar() {
@@ -306,7 +314,7 @@ async function save() {
   if (!S.dirty[tab] || S.busy) return;
   S.busy = true; S.error = ''; renderSaveBar(); setFieldsDisabled(); renderLayoutState();
   try {
-    const p = await api('/api/plan', jsonOpts('PUT', { section: tab, content: S.data[tab] || {}, revision: S.records[tab]?.revision || 0 }));
+    const p = await api('/api/plan', jsonOpts('PUT', { section: tab, content: Object.fromEntries(Object.entries(S.data[tab] || {}).filter(([k]) => sections[tab].some(f => f.key === k))), revision: S.records[tab]?.revision || 0 }));
     S.records = { ...S.records, [tab]: p.section }; S.dirty = { ...S.dirty, [tab]: false }; S.incoming = S.incoming.filter(x => x !== tab); S.notice = 'Section saved online.';
   } catch (e) { S.error = errMsg(e, 'Could not save your answers.'); }
   finally { S.busy = false; }

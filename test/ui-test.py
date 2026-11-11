@@ -106,6 +106,13 @@ with sync_playwright() as p:
         y.click(f'nav button[aria-label="{tab}"]')
         check(y.locator('h1').inner_text() == tab, 'tab renders: ' + tab)
     y.screenshot(path='/tmp/shot-questions.png')
+    # tiers
+    y.click('nav button[aria-label="Feature priorities"]')
+    check(y.locator('.tier-group-base .feature').count() == 9 and y.locator('.tier-group-pro .feature').count() == 11, 'features split 9 included / 11 pro')
+    check('$249' in y.locator('.tier-price.base').inner_text(), 'plan price shown')
+    y.select_option('#answer-features-vendorsPriority', 'Very interested'); y.click('#saveBtn'); expect(y.locator('#notice')).to_have_text('Section saved online.')
+    check(True, 'pro interest saves')
+    y.locator('.tier-group-pro').scroll_into_view_if_needed(); y.screenshot(path='/tmp/shot-tiers.png')
     # files on answers
     y.click('nav button[aria-label="Current events"]')
     y.set_input_files('#files-answer-events-event0Process input[type=file]', files=[{'name':'signups.png','mimeType':'image/png','buffer':bytes([137,80,78,71,13,10,26,10,0,0,0,0])},{'name':'budget.xlsx','mimeType':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','buffer':bytes([80,75,3,4,0,0])}])

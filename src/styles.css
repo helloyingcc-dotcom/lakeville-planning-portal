@@ -60,3 +60,18 @@ img{max-width:100%;display:block}
 .pagenav-btn:hover{border-color:#9caf8b}
 .pagenav-count{font-size:11px;color:#86927b}
 @media(max-width:650px){.pagenav-count{display:none}.pagenav-btn{font-size:12px;padding:8px 10px}}
+
+/* tiers on the feature page */
+.tier-group{margin-bottom:34px}
+.tier-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}
+.tier-head h2{font-family:Georgia,serif;font-weight:400;font-size:26px;margin:4px 0}
+.tier-head p{color:#6f7b64;font-size:14px;margin:0}
+.tier-price{white-space:nowrap;border-radius:20px;padding:7px 14px;font-size:13px;font-weight:600}
+.tier-price.base{background:#e5efe0;color:#285b45}
+.tier-price.pro{background:#efe9f7;color:#5b3f8c}
+.tier-badge{display:inline-block;font-size:10px;letter-spacing:.8px;text-transform:uppercase;border-radius:12px;padding:3px 8px;margin-bottom:6px;font-weight:600}
+.tier-badge.base{background:#e5efe0;color:#285b45}
+.tier-badge.pro{background:#efe9f7;color:#5b3f8c}
+.feature.tier-pro{border-color:#e3dbef;background:#fcfbfe}
+.tier-group-pro .tier-head{border-top:1px dashed #d9cfe8;padding-top:24px}
+@media(max-width:650px){.tier-head{flex-direction:column}}
