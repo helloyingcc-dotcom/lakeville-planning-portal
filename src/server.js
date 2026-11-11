@@ -33,6 +33,9 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS comment_messages_thread ON comment_messages(thread_id, seq)`,
   `CREATE TABLE IF NOT EXISTS answer_files (id TEXT PRIMARY KEY NOT NULL, object_key TEXT NOT NULL, section TEXT NOT NULL, field_key TEXT NOT NULL, author_id TEXT NOT NULL, author_name TEXT NOT NULL, name TEXT NOT NULL, content_type TEXT NOT NULL, size INTEGER NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS answer_files_field ON answer_files(section, field_key, created_at)`,
+  `CREATE TABLE IF NOT EXISTS team_topics (name TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, created_by TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS team_messages (seq INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, id TEXT NOT NULL UNIQUE, topic TEXT NOT NULL, ref_section TEXT, ref_field TEXT, ref_label TEXT, author_id TEXT NOT NULL, author_name TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL, edited_at TEXT)`,
+  `INSERT OR IGNORE INTO team_topics (name,created_by,created_at) VALUES ('General','system','2026-11-11T00:00:00Z'),('Family Game Night','system','2026-11-11T00:00:01Z'),('Sweetheart Dance','system','2026-11-11T00:00:02Z'),('Car Show','system','2026-11-11T00:00:03Z'),('Literacy Night','system','2026-11-11T00:00:04Z')`,
 ];
 let schemaReady = null;
 function ensureSchema(db) {
@@ -286,6 +289,58 @@ async function answerFileDelete(request, env, user) {
   return json({ removed: true });
 }
 
+/* ---------------- Lakeville team chat (owner reads, team writes) ---------------- */
+const TEAM_PAGE = 300, MAX_TOPICS = 40;
+async function teamGet(request, env, user) {
+  const before = Number(new URL(request.url).searchParams.get('before') || 0);
+  if (!Number.isSafeInteger(before) || before < 0) return json({ error: 'Invalid request.' }, 400);
+  const rows = await env.DB.prepare(`SELECT * FROM (SELECT m.seq,m.id,m.topic,m.ref_section,m.ref_field,m.ref_label,m.author_id,${NAME('m', 'author_id', 'author_name')} AS author_name,m.body,m.created_at,m.edited_at FROM team_messages m WHERE (?=0 OR m.seq<?) ORDER BY m.seq DESC LIMIT ${TEAM_PAGE + 1}) ORDER BY seq`).bind(before, before).all();
+  const more = rows.results.length > TEAM_PAGE, messages = more ? rows.results.slice(1) : rows.results;
+  const topics = await env.DB.prepare('SELECT name FROM team_topics ORDER BY created_at').all();
+  return json({ messages, topics: topics.results.map(t => t.name), me: user.userId, readOnly: user.isOwner, nextBefore: more ? messages[0].seq : null });
+}
+async function teamPost(request, env, user) {
+  if (user.isOwner) return json({ error: 'The team chat is read-only for DBY. Use Questions for DBY to reply.' }, 403);
+  let p; try { p = await readJson(request); } catch { return json({ error: 'Invalid message.' }, 400); }
+  if (!uuid(p.id) || typeof p.body !== 'string' || !p.body.trim() || p.body.length > 4000 || typeof p.topic !== 'string') return json({ error: 'Write a message (up to 4,000 characters).' }, 400);
+  const topic = await env.DB.prepare('SELECT name FROM team_topics WHERE name=?').bind(p.topic).first('name');
+  if (!topic) return json({ error: 'Choose a topic.' }, 400);
+  let ref = null;
+  if (p.ref != null) {
+    const sec = p.ref.section, key = p.ref.field, field = validSection(sec) && sec !== 'general' ? (key === MODEL.INTRO_KEY ? { label: 'Page introduction' } : MODEL.sections[sec].find(f => f.key === key)) : null;
+    if (!field) return json({ error: 'That question no longer exists.' }, 400);
+    ref = [sec, key, (MODEL.tabs.find(t => t[0] === sec)?.[1] || sec) + ' › ' + field.label];
+  }
+  await env.DB.prepare('INSERT INTO team_messages (id,topic,ref_section,ref_field,ref_label,author_id,author_name,body,created_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(p.id, topic, ref?.[0] ?? null, ref?.[1] ?? null, ref?.[2] ?? null, user.userId, user.displayName, p.body.trim(), nowIso()).run();
+  return json({ ok: true });
+}
+async function teamPatch(request, env, user) {
+  let p; try { p = await readJson(request); } catch { return json({ error: 'Invalid edit.' }, 400); }
+  if (!uuid(p.id) || typeof p.body !== 'string' || !p.body.trim() || p.body.length > 4000) return json({ error: 'A message cannot be empty. Use Delete to remove it.' }, 400);
+  const row = await env.DB.prepare('UPDATE team_messages SET body=?,edited_at=? WHERE id=? AND author_id=? RETURNING id').bind(p.body.trim(), nowIso(), p.id, user.userId).first();
+  return row ? json({ ok: true }) : json({ error: 'You can only edit your own messages.' }, 403);
+}
+async function teamDelete(request, env, user) {
+  const id = new URL(request.url).searchParams.get('id');
+  if (!uuid(id)) return json({ error: 'Invalid message.' }, 400);
+  const row = await env.DB.prepare('SELECT author_id FROM team_messages WHERE id=?').bind(id).first();
+  if (!row) return json({ ok: true });
+  if (row.author_id !== user.userId) return json({ error: 'You can only delete your own messages.' }, 403);
+  await env.DB.prepare('DELETE FROM team_messages WHERE id=? AND author_id=?').bind(id, user.userId).run();
+  return json({ ok: true });
+}
+async function teamTopicPost(request, env, user) {
+  if (user.isOwner) return json({ error: 'The team chat is read-only for DBY.' }, 403);
+  let p; try { p = await readJson(request, 2000); } catch { return json({ error: 'Invalid topic.' }, 400); }
+  const name = typeof p.name === 'string' ? p.name.replace(/[\x00-\x1f\x7f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+  if (!name) return json({ error: 'Name the topic, e.g. the event.' }, 400);
+  const count = await env.DB.prepare('SELECT count(*) AS n FROM team_topics').first('n');
+  if (count >= MAX_TOPICS) return json({ error: 'There are already ' + MAX_TOPICS + ' topics.' }, 409);
+  await env.DB.prepare('INSERT OR IGNORE INTO team_topics (name,created_by,created_at) VALUES (?,?,?)').bind(name, user.userId, nowIso()).run();
+  const saved = await env.DB.prepare('SELECT name FROM team_topics WHERE name=?').bind(name).first('name');
+  return json({ name: saved });
+}
+
 /* ---------------- people ---------------- */
 async function mePut(request, env, user) {
   let p; try { p = await readJson(request, 2000); } catch { return json({ error: 'Invalid name.' }, 400); }
@@ -335,6 +390,13 @@ async function handle(request, env) {
       if (method === 'PATCH') return await commentsPatch(request, env, user);
       if (method === 'DELETE') return await commentsDelete(request, env, user);
     }
+    if (path === '/api/team') {
+      if (method === 'GET') return await teamGet(request, env, user);
+      if (method === 'POST') return await teamPost(request, env, user);
+      if (method === 'PATCH') return await teamPatch(request, env, user);
+      if (method === 'DELETE') return await teamDelete(request, env, user);
+    }
+    if (path === '/api/team/topics' && method === 'POST') return await teamTopicPost(request, env, user);
     if (path === '/api/answer-files') {
       if (method === 'GET') return await answerFileGet(request, env);
       if (method === 'POST') return await answerFilePost(request, env, user);

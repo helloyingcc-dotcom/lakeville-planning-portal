@@ -100,4 +100,22 @@ ok((await call('ying', '/api/plan')).j.sections.some(x => x.id === 'pro'), 'Pro 
 ok((await call('ying', '/api/comments', J('POST', { requestId: id(), body: 'x', section: 'pro', fieldKey: null, quote: '' }))).s === 400, 'no shared comments on Pro page');
 ok((await af('ying', 'pro', 'vendorsEvidence', 'x.png', png, 'image/png')).s === 400, 'no shared files on Pro page');
 ok((await call('ying', '/api/plan', J('PUT', { section: 'features', content: { vendorsPriority: 'Must Have' }, revision: 0 }))).s === 400, 'Pro features not on client feature page');
+// team chat
+let tg = await call('jessie', '/api/team');
+ok(tg.j.topics.includes('Car Show') && tg.j.readOnly === false, 'team topics seeded');
+ok((await call('ying', '/api/team')).j.readOnly === true, 'owner is read-only');
+const tm = id();
+ok((await call('jessie', '/api/team', J('POST', { id: tm, topic: 'Car Show', body: 'Do we need 3 entrances?', ref: { section: 'events', field: 'event0Process' } }))).s === 200, 'post team message with question link');
+ok((await call('ying', '/api/team', J('POST', { id: id(), topic: 'General', body: 'x' }))).s === 403, 'owner cannot post');
+ok((await call('jessie', '/api/team', J('POST', { id: id(), topic: 'Nope', body: 'x' }))).s === 400, 'unknown topic rejected');
+ok((await call('jessie', '/api/team', J('POST', { id: id(), topic: 'General', body: 'x', ref: { section: 'pro', field: 'vendorsSignal' } }))).s === 400, 'cannot link owner-only question');
+tg = await call('ying', '/api/team');
+ok(tg.j.messages.length === 1 && tg.j.messages[0].ref_label === 'Current events › How do you manage it today?' && tg.j.messages[0].author_name === 'Jessie', 'owner reads message with label ' + JSON.stringify(tg.j.messages[0]?.ref_label));
+ok((await call('jimmy', '/api/team', J('PATCH', { id: tm, body: 'hijack' }))).s === 403, 'cannot edit others team msg');
+ok((await call('jessie', '/api/team', J('PATCH', { id: tm, body: 'Do we need 3 entrances or 2?' }))).s === 200, 'edit own team msg');
+ok((await call('jimmy', '/api/team/topics', J('POST', { name: '  Spring  Carnival ' }))).j.name === 'Spring Carnival', 'add topic');
+ok((await call('jimmy', '/api/team/topics', J('POST', { name: 'spring carnival' }))).j.name === 'Spring Carnival', 'duplicate topic reuses existing');
+ok((await call('ying', '/api/team/topics', J('POST', { name: 'X' }))).s === 403, 'owner cannot add topic');
+ok((await call('jimmy', '/api/team?id=' + tm, { method: 'DELETE' })).s === 403, 'cannot delete others team msg');
+ok((await call('jessie', '/api/team?id=' + tm, { method: 'DELETE' })).s === 200 && (await call('ying', '/api/team')).j.messages.length === 0, 'delete own team msg');
 console.log(`API tests: ${pass} passed, ${fail} failed`);

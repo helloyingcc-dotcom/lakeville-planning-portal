@@ -24,6 +24,7 @@ const ICONS = {
   file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>',
   send:'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
   image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/>',
+  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   pencil:'<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
   trash:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
 };
@@ -71,8 +72,9 @@ async function api(url, opts = {}) {
 const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 /* ---------- state ---------- */
-const S = { tab: 'start', data: {}, records: {}, files: [], fileBusy: {}, fileError: {}, dirty: {}, loaded: false, busy: false, error: '', notice: '', incoming: [], me: null, nameEditing: false, nameBusy: false, nameError: '', commentsOpen: window.innerWidth > 1100, counts: [] };
+const S = { panelView: 'team', tab: 'start', data: {}, records: {}, files: [], fileBusy: {}, fileError: {}, dirty: {}, loaded: false, busy: false, error: '', notice: '', incoming: [], me: null, nameEditing: false, nameBusy: false, nameError: '', commentsOpen: window.innerWidth > 1100, counts: [] };
 const C = { scope: 'current', threads: [], active: null, messages: [], drafts: {}, uploads: {}, error: '', connected: false, busy: false, uploading: false, showResolved: false, composing: false, newAnchor: null, nextThreads: null, nextMessages: null, me: null, editing: null, editText: '', confirmDelete: null, outgoing: null, scrollAtEnd: true, listKey: '', lastList: '', lastThread: '', gen: 0 };
+const T = { messages: [], topics: ['General'], filter: 'All', topic: 'General', drafts: {}, ref: null, me: null, readOnly: false, editing: null, editText: '', confirmDelete: null, busy: false, error: '', last: '', newTopic: null, nextBefore: null, scrollAtEnd: true, loaded: false };
 const current = () => S.data[S.tab] || {};
 const fieldId = (tab, key) => 'answer-' + tab + '-' + key;
 const titleFor = tab => tab === 'start' ? 'Let’s build the right starting point.' : tabs.find(t => t[0] === tab)?.[1] || '';
@@ -91,12 +93,12 @@ function renderShell() {
       h('header', { class: 'topbar' },
         h('span', null, 'DBY ', h('span', { class: 'muted' }, '/ Lakeville PTA')),
         h('div', { class: 'topactions' },
-          h('button', { class: 'quiet comments-toggle', id: 'commentsToggle', 'aria-label': 'Team comments', onclick: () => { S.commentsOpen = !S.commentsOpen; renderLayoutState(); } }, icon('message'), 'Team comments ', h('span', { id: 'commentTotal' })),
+          h('button', { class: 'quiet comments-toggle', id: 'commentsToggle', 'aria-label': 'Team chat and questions', onclick: () => { S.commentsOpen = !S.commentsOpen; renderLayoutState(); renderPanel(); } }, icon('message'), 'Team chat & questions ', h('span', { id: 'commentTotal' })),
           h('button', { class: 'quiet', id: 'reloadBtn', onclick: reload }, icon('refresh'), 'Reload saved'),
           h('button', { class: 'quiet', id: 'exportBtn', onclick: download }, icon('download'), 'Export answers'))),
       h('div', { class: 'content-layout' },
         h('main', { id: 'main' }),
-        h('aside', { class: 'comments-panel', id: 'panel', 'aria-label': 'Team comments' })))));
+        h('aside', { class: 'comments-panel', id: 'panel', 'aria-label': 'Team chat and questions for DBY' })))));
   renderNav(); renderMain(); renderLayoutState(); renderPanel();
 }
 function renderLayoutState() {
@@ -124,7 +126,9 @@ function field(f) {
   control.value = current()[f.key] || '';
   return h('div', { class: 'field' },
     h('div', { class: 'field-heading' }, h('label', { for: id }, f.label),
-      ownerOnly(tab) ? null : h('button', { class: 'comment-anchor', type: 'button', 'data-anchor': f.key, 'aria-label': 'Comment on ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => comment(f) }, icon('message', 13), count ? String(count) : 'Comment')),
+      ownerOnly(tab) ? null : h('span', { class: 'anchor-group' },
+        S.me && !S.me.isOwner ? h('button', { class: 'comment-anchor team-anchor', type: 'button', 'aria-label': 'Discuss with the Lakeville team: ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => openTeam({ section: tab, field: f.key, label: titleFor(tab) + ' › ' + (sections[tab].find(x => x.key === f.key)?.label || f.label) }) }, icon('users', 13), 'Discuss with team') : null,
+        h('button', { class: 'comment-anchor', type: 'button', 'data-anchor': f.key, 'aria-label': 'Ask DBY about ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => comment(f) }, icon('message', 13), count ? String(count) : 'Ask DBY'))),
     f.hint ? h('small', null, f.hint) : null, control,
     f.options || ownerOnly(tab) ? null : h('div', { class: 'answer-files', id: 'files-' + fieldId(tab, f.key) }, fileArea(tab, f.key)));
 }
@@ -259,7 +263,7 @@ function renderMain() {
       h('div', { class: 'heading-side' }, h('span', { class: 'statusbadge' }, 'Discovery stage'),
         ownerOnly(tab) ? null : h('button', { class: introCount ? 'comment-anchor intro-comment has-comments' : 'comment-anchor intro-comment', type: 'button', id: 'introComment', 'aria-label': 'Comment on the page introduction' + (introCount ? ` (${introCount} open)` : ''), onclick: commentIntro }, icon('message', 13), introCount ? introCount + ' on intro' : 'Comment on intro'))),
     h('div', { class: 'context' }, h('span', { class: 'dot' }), h('span', null, 'Examples are illustrative. Lakeville’s confirmed details belong in the answer fields.'),
-      ownerOnly(tab) ? null : h('button', { class: 'comment-anchor section-comment', onclick: () => comment() }, icon('message', 14), 'Discuss this section')),
+      ownerOnly(tab) ? null : h('button', { class: 'comment-anchor section-comment', onclick: () => comment() }, icon('message', 14), 'Ask DBY about this page')),
     h('div', { id: 'incoming' }),
     !S.loaded && !S.error ? h('p', { role: 'status' }, 'Loading shared answers…') : null,
     S.error ? h('div', { class: 'error', role: 'alert' }, S.error + ' ', h('button', { class: 'quiet', onclick: reload }, 'Reload saved answers')) : null,
@@ -368,7 +372,7 @@ function comment(f) {
 }
 function commentIntro() { openComposer({ section: S.tab, fieldKey: INTRO_KEY, quote: (titleFor(S.tab) + ' — ' + descriptions[S.tab]).slice(0, 500) }); }
 function openComposer(anchor) {
-  C.newAnchor = anchor; C.active = null; C.messages = []; C.composing = true; C.error = ''; C.editing = null; C.confirmDelete = null;
+  S.panelView = 'dby'; C.newAnchor = anchor; C.active = null; C.messages = []; C.composing = true; C.error = ''; C.editing = null; C.confirmDelete = null;
   C.scope = anchor.section === 'general' ? 'general' : 'current';
   S.commentsOpen = true; renderLayoutState(); onSectionChange(true);
   setTimeout(() => $('team-comment')?.focus(), 30);
@@ -389,7 +393,7 @@ function updateCounts(counts) {
   renderLayoutState();
   for (const b of document.querySelectorAll('#main [data-anchor]')) {
     const n = countFor(S.tab, b.getAttribute('data-anchor'));
-    b.lastChild.textContent = n ? String(n) : 'Comment';
+    b.lastChild.textContent = n ? String(n) : 'Ask DBY';
   }
   const intro = $('introComment');
   if (intro) { const n = countFor(S.tab, INTRO_KEY); intro.className = n ? 'comment-anchor intro-comment has-comments' : 'comment-anchor intro-comment'; intro.lastChild.textContent = n ? n + ' on intro' : 'Comment on intro'; intro.setAttribute('aria-label', 'Comment on the page introduction' + (n ? ` (${n} open)` : '')); }
@@ -578,8 +582,16 @@ function composeView() {
     h('div', null, h('small', null, 'Visible to everyone with portal access'),
       h('button', { class: 'primary', id: 'sendBtn', type: 'submit', disabled: C.busy || C.uploading || (!draft.trim() && !files.length) }, icon('send', 14), C.busy ? 'Sending…' : C.active ? 'Reply' : 'Post comment')));
 }
+function panelHeader() {
+  const tab = (id, label, ic) => h('button', { class: 'panel-tab', role: 'tab', 'aria-selected': String(S.panelView === id), type: 'button', onclick: () => { if (S.panelView !== id) { S.panelView = id; renderPanel(); if (id === 'team') pollTeam(); else pollList(); } } }, icon(ic, 15), label);
+  return h('div', { class: 'comments-heading' },
+    h('div', { class: 'panel-tabs', role: 'tablist' }, tab('team', 'Team chat', 'users'), tab('dby', 'Questions for DBY', 'message')),
+    h('div', { class: 'panel-head-right' }, h('span', { id: 'connState' }),
+      h('button', { class: 'quiet iconbutton', 'aria-label': 'Close sidebar', onclick: () => { S.commentsOpen = false; renderLayoutState(); } }, icon('x', 18))));
+}
 function renderPanel() {
   const panel = $('panel'); if (!panel) return;
+  if (S.panelView === 'team') return renderTeam(panel);
   // keep focus, caret and scroll positions across re-renders
   const active = document.activeElement, focusId = active && panel.contains(active) ? active.id : null;
   const caret = focusId && 'selectionStart' in active ? [active.selectionStart, active.selectionEnd] : null;
@@ -588,9 +600,7 @@ function renderPanel() {
   const visible = C.threads.filter(t => C.showResolved || !t.resolved);
   const a = C.active;
   fill(panel, 
-    h('div', { class: 'comments-heading' },
-      h('div', null, h('h2', null, icon('message', 18), 'Team comments'), h('span', { id: 'connState' })),
-      h('button', { class: 'quiet iconbutton', 'aria-label': 'Close comments', onclick: () => { S.commentsOpen = false; renderLayoutState(); } }, icon('x', 18))),
+    panelHeader(),
     C.error ? h('div', { role: 'alert', class: 'comment-error' }, C.error) : null,
     a ? [
       h('div', { class: 'thread-top' }, h('button', { class: 'quiet', onclick: backToList }, icon('left', 14), 'All discussions'), h('span', { class: a.resolved ? 'thread-status resolved' : 'thread-status' }, a.resolved ? 'Resolved' : 'Open')),
@@ -619,14 +629,114 @@ function renderPanel() {
   if (focusId) { const el = $(focusId); if (el && !el.disabled) { el.focus({ preventScroll: true }); if (caret && 'selectionStart' in el) try { el.setSelectionRange(caret[0], caret[1]); } catch { /* not a text input */ } } }
 }
 
+/* ---------- Lakeville team chat ---------- */
+function openTeam(ref) {
+  S.panelView = 'team'; S.commentsOpen = true; T.ref = ref; T.error = '';
+  renderLayoutState(); renderPanel(); pollTeam();
+  setTimeout(() => $('team-message')?.focus(), 30);
+}
+let teamBusy = false;
+async function pollTeam() {
+  if (teamBusy || document.hidden) return;
+  teamBusy = true;
+  try {
+    const p = await api('/api/team');
+    T.me = p.me; T.readOnly = !!p.readOnly; T.loaded = true; C.connected = true;
+    if (!p.topics.includes(T.topic)) T.topic = p.topics[0] || 'General';
+    const snap = JSON.stringify([p.messages, p.topics]);
+    if (snap !== T.last) {
+      T.last = snap;
+      const first = p.messages[0]?.seq || 0;
+      T.messages = [...T.messages.filter(m => m.seq < first && !p.messages.some(x => x.id === m.id)), ...p.messages];
+      if (T.nextBefore == null || p.messages.length) T.nextBefore = p.nextBefore;
+      T.topics = p.topics;
+      if (S.panelView === 'team' && !T.editing && !T.confirmDelete) renderPanel();
+    }
+  } catch (e) { C.connected = false; if (e.status && S.panelView === 'team') { T.error = e.message; renderPanel(); } }
+  finally { teamBusy = false; }
+}
+async function teamCall(fn, fallback) {
+  if (T.busy) return;
+  T.busy = true; T.error = ''; renderPanel();
+  try { await fn(); T.last = ''; }
+  catch (e) { T.error = errMsg(e, fallback); }
+  finally { T.busy = false; renderPanel(); pollTeam(); }
+}
+function sendTeam(e) {
+  e.preventDefault();
+  const body = (T.drafts[T.topic] || '').trim();
+  if (!body) return;
+  const id = crypto.randomUUID(), ref = T.ref;
+  teamCall(async () => {
+    await api('/api/team', jsonOpts('POST', { id, topic: T.topic, body, ref: ref ? { section: ref.section, field: ref.field } : null }));
+    T.drafts[T.topic] = ''; T.ref = null; T.scrollAtEnd = true;
+  }, 'Message not sent. Please try again.');
+}
+function addTopic(e) {
+  e.preventDefault();
+  const name = (T.newTopic || '').trim(); if (!name) return;
+  teamCall(async () => { const p = await api('/api/team/topics', jsonOpts('POST', { name })); T.topic = p.name; T.filter = 'All'; T.newTopic = null; }, 'Could not add the topic.');
+}
+function teamMessageView(m) {
+  const mine = T.me && m.author_id === T.me, editing = T.editing === m.id, confirming = T.confirmDelete === m.id;
+  return h('article', { class: 'chat-message team-message' },
+    h('div', { class: 'message-head' }, h('strong', null, m.author_name), h('time', { datetime: m.created_at }, fmtTime(m.created_at), m.edited_at ? h('span', { class: 'edited' }, '(edited)') : null)),
+    h('div', { class: 'team-tags' }, h('span', { class: 'topic-chip' }, m.topic),
+      m.ref_label ? h('button', { class: 'ref-link', type: 'button', title: 'Go to this question', onclick: () => jump(m.ref_section, m.ref_field) }, 'Re: ' + m.ref_label) : null),
+    editing
+      ? h('div', { class: 'message-edit' }, h('label', { class: 'sr-only', for: 'tedit-' + m.id }, 'Edit message'),
+        h('textarea', { id: 'tedit-' + m.id, value: T.editText, disabled: T.busy, maxlength: 4000, rows: 3, oninput: e => { T.editText = e.target.value; } }),
+        h('div', null, h('button', { class: 'quiet', type: 'button', disabled: T.busy, onclick: () => { T.editing = null; renderPanel(); } }, 'Cancel'),
+          h('button', { class: 'primary', type: 'button', disabled: T.busy, onclick: () => teamCall(async () => { await api('/api/team', jsonOpts('PATCH', { id: m.id, body: T.editText })); T.editing = null; }, 'Could not edit the message.') }, T.busy ? 'Saving…' : 'Save')))
+      : h('p', null, m.body),
+    mine && !editing ? (confirming
+      ? h('div', { class: 'message-confirm', role: 'group', 'aria-label': 'Confirm delete' }, h('span', null, 'Delete this message?'),
+        h('button', { class: 'quiet', type: 'button', disabled: T.busy, onclick: () => { T.confirmDelete = null; renderPanel(); } }, 'Cancel'),
+        h('button', { class: 'danger', type: 'button', disabled: T.busy, onclick: () => teamCall(async () => { await api('/api/team?id=' + m.id, { method: 'DELETE' }); T.confirmDelete = null; T.messages = T.messages.filter(x => x.id !== m.id); }, 'Could not delete the message.') }, T.busy ? 'Deleting…' : 'Delete'))
+      : h('div', { class: 'message-tools' },
+        h('button', { class: 'quiet', type: 'button', disabled: T.busy, onclick: () => { T.editing = m.id; T.editText = m.body; T.confirmDelete = null; renderPanel(); setTimeout(() => $('tedit-' + m.id)?.focus(), 0); } }, icon('pencil', 12), 'Edit'),
+        h('button', { class: 'quiet', type: 'button', disabled: T.busy, onclick: () => { T.confirmDelete = m.id; T.editing = null; renderPanel(); } }, icon('trash', 12), 'Delete'))) : null);
+}
+function renderTeam(panel) {
+  const active = document.activeElement, focusId = active && panel.contains(active) ? active.id : null;
+  const caret = focusId && 'selectionStart' in active ? [active.selectionStart, active.selectionEnd] : null;
+  const feedOld = panel.querySelector('.message-feed'), feedScroll = feedOld?.scrollTop || 0;
+  const shown = T.filter === 'All' ? T.messages : T.messages.filter(m => m.topic === T.filter);
+  const topicSelect = (id, value, onchange, withAll) => { const sel = h('select', { id, onchange }, withAll ? h('option', { value: 'All' }, 'All topics') : null, T.topics.map(t => h('option', { value: t }, t))); sel.value = value; return sel; };
+  fill(panel,
+    panelHeader(),
+    h('div', { class: 'team-note' }, T.readOnly ? 'Lakeville’s own space. You’re reading along as DBY (read-only).' : 'Your Lakeville team space: talk it through here, then put the final answer in the question. DBY can read along.'),
+    T.error ? h('div', { role: 'alert', class: 'comment-error' }, T.error) : null,
+    h('div', { class: 'comments-filters team-filters' },
+      h('label', null, 'Show', topicSelect('teamFilter', T.filter, e => { T.filter = e.target.value; if (T.filter !== 'All') T.topic = T.filter; T.scrollAtEnd = true; renderPanel(); }, true)),
+      T.readOnly ? null : (T.newTopic == null
+        ? h('button', { class: 'quiet', type: 'button', onclick: () => { T.newTopic = ''; renderPanel(); setTimeout(() => $('newTopic')?.focus(), 0); } }, icon('plus', 13), 'New topic')
+        : h('form', { class: 'new-topic', onsubmit: addTopic }, h('input', { id: 'newTopic', maxlength: 40, placeholder: 'e.g. Spring Carnival', value: T.newTopic, oninput: e => { T.newTopic = e.target.value; } }),
+          h('button', { class: 'primary', type: 'submit', disabled: T.busy }, 'Add'), h('button', { class: 'quiet', type: 'button', onclick: () => { T.newTopic = null; renderPanel(); } }, 'Cancel')))),
+    h('div', { class: 'message-feed', 'aria-live': 'polite', onscroll: e => { const el = e.target; T.scrollAtEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 60; } },
+      T.nextBefore ? h('button', { class: 'quiet', disabled: T.busy, onclick: () => teamCall(async () => { const p = await api('/api/team?before=' + T.nextBefore); T.messages = [...p.messages.filter(m => !T.messages.some(o => o.id === m.id)), ...T.messages]; T.nextBefore = p.nextBefore; T.scrollAtEnd = false; }, 'Could not load older messages.') }, 'Load older messages') : null,
+      !T.loaded ? h('p', { class: 'comment-empty' }, 'Loading…') : !shown.length ? h('div', { class: 'comment-empty' }, icon('users', 24), h('strong', null, T.filter === 'All' ? 'No team messages yet' : 'Nothing about ' + T.filter + ' yet'), h('p', null, 'Start the conversation below, or use “Discuss with team” beside any question.')) : null,
+      shown.map(teamMessageView)),
+    T.readOnly ? null : h('form', { class: 'comment-compose team-compose', onsubmit: sendTeam },
+      T.ref ? h('div', { class: 'team-ref' }, h('span', null, 'Re: ' + T.ref.label), h('button', { class: 'quiet iconbutton', type: 'button', 'aria-label': 'Remove question link', onclick: () => { T.ref = null; renderPanel(); } }, icon('x', 13))) : null,
+      h('label', { class: 'team-topic' }, 'Topic', topicSelect('teamTopic', T.topic, e => { T.topic = e.target.value; renderPanel(); }, false)),
+      h('label', { class: 'sr-only', for: 'team-message' }, 'Message to the Lakeville team'),
+      h('textarea', { id: 'team-message', value: T.drafts[T.topic] || '', disabled: T.busy, maxlength: 4000, rows: 3, placeholder: 'Message the Lakeville team…', oninput: e => { T.drafts[T.topic] = e.target.value; const b = $('teamSend'); if (b) b.disabled = T.busy || !e.target.value.trim(); } }),
+      h('div', null, h('small', null, 'Visible to the Lakeville team and DBY'),
+        h('button', { class: 'primary', id: 'teamSend', type: 'submit', disabled: T.busy || !(T.drafts[T.topic] || '').trim() }, icon('send', 14), T.busy ? 'Sending…' : 'Send'))));
+  renderPanelHeader();
+  const feed = panel.querySelector('.message-feed'); if (feed) feed.scrollTop = T.scrollAtEnd ? feed.scrollHeight : feedScroll;
+  if (focusId) { const el = $(focusId); if (el && !el.disabled) { el.focus({ preventScroll: true }); if (caret && 'selectionStart' in el) try { el.setSelectionRange(caret[0], caret[1]); } catch { /* not text */ } } }
+}
+
 /* ---------- start ---------- */
 window.addEventListener('beforeunload', e => {
-  const unsentComments = C.uploading || Object.values(C.drafts).some(v => v.trim()) || Object.values(C.uploads).some(v => v.length);
+  const unsentComments = Object.values(T.drafts).some(v => v.trim()) || C.uploading || Object.values(C.drafts).some(v => v.trim()) || Object.values(C.uploads).some(v => v.length);
   if (Object.values(S.dirty).some(Boolean) || unsentComments) { e.preventDefault(); e.returnValue = ''; }
 });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { syncPlan(); pollList(); pollThread(); } });
-setInterval(() => { syncPlan(); pollList(); pollThread(); }, 2000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { syncPlan(); pollList(); pollThread(); pollTeam(); } });
+setInterval(() => { syncPlan(); pollList(); pollThread(); if (S.commentsOpen && S.panelView === 'team') pollTeam(); }, 2000);
 renderShell();
-api('/api/me').then(me => { S.me = me; tabs = me.isOwner ? allTabs : allTabs.filter(t => !ownerOnly(t[0])); renderNav(); renderMain(); renderPanel(); }).catch(e => { S.error = errMsg(e, 'Could not check your sign-in.'); renderMain(); });
+api('/api/me').then(me => { S.me = me; tabs = me.isOwner ? allTabs : allTabs.filter(t => !ownerOnly(t[0])); renderNav(); renderMain(); renderPanel(); pollTeam(); }).catch(e => { S.error = errMsg(e, 'Could not check your sign-in.'); renderMain(); });
 load();
 })();

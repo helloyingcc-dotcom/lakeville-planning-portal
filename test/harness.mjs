@@ -42,5 +42,5 @@ http.createServer(async (req, res) => {
   res.end();
 }).listen(port, () => {
   console.log('ready', port);
-  console.log('TOKENS', JSON.stringify({ ying: token('ying@example.com'), jessie: token('jessie.smith@example.com'), badAud: token('x@example.com', { aud: 'other' }), expired: token('x@example.com', { exp: 1000 }) }));
+  console.log('TOKENS', JSON.stringify({ ying: token('ying@example.com'), jessie: token('jessie.smith@example.com'), jimmy: token('jimmy.t@example.com'), badAud: token('x@example.com', { aud: 'other' }), expired: token('x@example.com', { exp: 1000 }) }));
 });
