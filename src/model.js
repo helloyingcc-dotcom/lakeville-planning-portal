@@ -63,7 +63,7 @@ const INCLUDED=[
 ['Reports',['Live dashboard: registered, checked in, attendance rate, payments, with adult and kid totals','Pre-event review of who’s registered, paid, pending or missing details','No-shows list after each event','Filter families by grade or teacher/class','See who ordered extras (like pizza) and how each question was answered','Reports by grade and teacher, with Excel/CSV export']],
 ['Everything else',['Unlimited events all school year, and the app stays on over the summer and school breaks so you can plan and set up ahead','Works on any phone, tablet or computer','A “Get started” checklist, plus setup, training, email support and updates from DBY']]];
 const MAX_EVENTS=10, EVENT_FIELDS=6;
-const EVENT_ORDER=['Set this one up first','Next in line','Later in the year'];
+const EVENT_ORDER=['1st: set this one up first','2nd','3rd','Later in the year','Not sure yet'];
 const PRIORITY=['Must Have','Nice to Have','Not Sure'];
 const SIGNAL=['Strong signal','Some signal','No signal yet'];
 const f=(key,label,hint)=>({key,label,hint});

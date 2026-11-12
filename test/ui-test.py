@@ -192,7 +192,7 @@ with sync_playwright() as p:
     check(y.locator('#event-title-0').inner_text() == 'Holiday Gift Shop', 'card titled by event name')
     y.locator('.add-event').click(); check(y.locator('.event-card').count() == 3, 'Add another event adds a card')
     y.fill('#answer-events-event1Name', 'Car Show'); check(y.locator('#event-title-1').inner_text() == 'Car Show', 'title updates while typing')
-    y.select_option('#answer-events-event1Order', 'Set this one up first')
+    y.select_option('#answer-events-event1Order', '1st: set this one up first')
     expect(y.locator('#saveState')).to_have_text('All changes saved ✓', timeout=8000)
     j.click('nav button[aria-label="Current events"]'); expect(j.locator('#event-title-1')).to_have_text('Car Show', timeout=6000)
     check(True, 'teammate sees new event card')
