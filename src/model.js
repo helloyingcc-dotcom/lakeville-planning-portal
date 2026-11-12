@@ -6,7 +6,7 @@ const OWNER_SECTIONS=['preview','pro'];
 const TIERS={base:{name:'School-Year Essentials',price:'$249 per school year',blurb:'Everything in the plan Lakeville is subscribing to.'},pro:{name:'School-Year Pro',price:'Upgrade pricing to come',blurb:'Optional extras. Tell us what interests you; nothing here is built yet.'}};
 // [key, title, description, tier]  base = included in the subscription, pro = higher tier (not built yet)
 const features=[
-['signupform','Built-in sign-up page','Families sign up in the app and get their QR ticket right away. Each event adds its own questions.','base'],
+['signupform','Direct sign-up in the app','No more Google Forms: families sign up on the event’s own page and get their QR ticket right away. Each event adds its own questions.','base'],
 ['import','Spreadsheet import','Have families in an Excel or CSV list already (paper sign-ups, last year’s list)? Bring them in; nobody gets a duplicate ticket.','base'],
 ['checkin','QR code check-in','Quick check-in for students, parents and guests.','base'],
 ['attendees','Attendee management','See registration details, search by name or QR code, and spot no-shows.','base'],
@@ -44,7 +44,7 @@ const AHEAD=[
 const INTEREST=['Yes, we’d use this','Maybe later','Not needed','Not sure'];
 // What Lakeville gets in School-Year Essentials (shown on the Start page). Keep in step with the Scope sheet.
 const INCLUDED=[
-['Sign-ups',['A sign-up page for every event, with your own questions (pizza count, T-shirt size…)','Have a list in Excel already (paper sign-ups, last year’s families)? Import it; nobody gets a duplicate ticket','One registration per family: parents, students and guests together']],
+['Sign-ups',['Families sign up directly in the app: no more Google Forms. Every event gets its own sign-up page with your own questions (pizza count, T-shirt size…)','Have a list in Excel already (paper sign-ups, last year’s families)? Import it; nobody gets a duplicate ticket','One registration per family: parents, students and guests together']],
 ['Digital tickets',['One QR ticket per family, emailed the moment they sign up','Edit and re-send tickets for last-minute changes','An updated ✅ ticket once their payment is confirmed']],
 ['Payment tracking',['Track Zelle, cash, check and envelope payments','Verified / Pending / Not paid for every family','Automatic reminders to families who haven’t paid']],
 ['Event night check-in',['4 or more volunteers checking in at once, each on their own phone','Scan the QR code or search by parent name, student name or ticket code','Check in part of a family as they arrive, plus walk-ins at the door','Paid / Not paid shown at the door; families can also self check-in with a ✅ screen']],
