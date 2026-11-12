@@ -119,6 +119,13 @@ function renderNav() {
 function setTab(id) { S.tab = id; S.error = ''; S.notice = ''; if (window.innerWidth > 850 && !S.commentsOpen) { S.commentsOpen = true; renderLayoutState(); renderPanel(); } renderNav(); renderMain(); onSectionChange(); window.scrollTo(0, 0); }
 
 /* ---------- main content ---------- */
+function byLine(tab, key) {
+  const b = S.records[tab]?.answeredBy?.[key];
+  if (!b || !(S.data[tab]?.[key] || '').trim()) return null;
+  const others = (b.all || []).filter(n => n !== b.n);
+  return [icon('pencil', 12), h('span', null, h('strong', null, b.n), b.at ? ' · ' + fmtTime(b.at) : '', others.length ? ' · also edited by ' + others.join(', ') : '')];
+}
+function renderByLines() { for (const el of document.querySelectorAll('[data-by]')) { const [tab, key] = el.dataset.by.split(':'); fill(el, byLine(tab, key)); } }
 function field(f) {
   const tab = S.tab, id = fieldId(tab, f.key), count = countFor(tab, f.key);
   const disabled = !S.loaded;
@@ -138,6 +145,7 @@ function field(f) {
     f.hint ? h('small', null, f.hint) : null, control,
     h('div', { id: 'conflict-' + id }),
     ownerOnly(tab) ? null : flagSlot('field:' + tab + ':' + f.key),
+    h('div', { class: 'answered-by', 'data-by': tab + ':' + f.key }, byLine(tab, f.key)),
     h('div', { class: 'history', id: 'history-' + id }, historyLink(tab, f.key)),
     f.options || ownerOnly(tab) ? null : h('div', { class: 'answer-files', id: 'files-' + fieldId(tab, f.key) }, fileArea(tab, f.key)));
 }
@@ -455,6 +463,7 @@ let planSyncing = false;
 // Bring other people's answers in, field by field, without touching anything I'm still editing.
 function mergeSection(sec, skipKey) {
   S.records[sec.id] = sec;
+  setTimeout(renderByLines);
   const active = document.activeElement;
   const keys = new Set([...Object.keys(sec.content), ...Object.keys(S.base[sec.id] || {})]);
   for (const key of keys) {

@@ -209,3 +209,5 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .presence-when{text-align:right;font-size:.9rem}
 .presence-name small,.presence-when small{color:#6b7a73;font-size:.78rem}
 .presence-online{color:#2e7d4f}
+
+.answered-by{display:flex;align-items:center;gap:6px;font-size:11px;color:#6b7383;min-height:0}.answered-by:empty{display:none}.answered-by strong{font-weight:600;color:#3d4a66}

@@ -104,11 +104,14 @@ async function getUser(request, env) {
 }
 
 /* ---------------- planning answers ---------------- */
+// field_by holds, per answer, who wrote it: {key: {n: last editor, at: time, all: [everyone who edited]}} (older rows: {key: name}).
+const byEntry = v => typeof v === 'string' ? { n: v, at: null, all: [v] } : v && typeof v === 'object' ? { n: v.n, at: v.at || null, all: Array.isArray(v.all) ? v.all : [v.n] } : null;
+const answeredBy = raw => { let m = {}; try { m = JSON.parse(raw || '{}') || {}; } catch { m = {}; } return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, byEntry(v)]).filter(([, v]) => v?.n)); };
 async function planGet(env, user) {
   const r = await env.DB.prepare('SELECT * FROM planning_sections').all();
   r.results = r.results.filter(row => user.isOwner || !ownerOnly(row.id));
   const files = await env.DB.prepare(`SELECT f.id,f.section,f.field_key,f.author_id,${NAME('f', 'author_id', 'author_name')} AS author_name,f.name,f.content_type,f.size,f.created_at FROM answer_files f ORDER BY f.created_at`).all();
-  return json({ sections: r.results.map(({ field_by, ...row }) => ({ ...row, content: JSON.parse(row.content) })), files: files.results });
+  return json({ sections: r.results.map(({ field_by, ...row }) => ({ ...row, content: JSON.parse(row.content), answeredBy: answeredBy(field_by) })), files: files.results });
 }
 async function planPut(request, env, user) {
   const raw = await request.text();
@@ -140,11 +143,12 @@ async function planPatch(request, env, user) {
     const row = await env.DB.prepare('SELECT * FROM planning_sections WHERE id=?').bind(section).first();
     const content = row ? JSON.parse(row.content) : {}, cur = content[key] ?? '';
     let fieldBy = {}; try { fieldBy = JSON.parse(row?.field_by || '{}') || {}; } catch { fieldBy = {}; }
-    const strip = r => { const { field_by, ...rest } = r; return { ...rest, content: JSON.parse(r.content) }; };
+    const strip = r => { const { field_by, ...rest } = r; return { ...rest, content: JSON.parse(r.content), answeredBy: answeredBy(field_by) }; };
     if (cur === value) return json({ section: row ? strip(row) : null, saved: true });
-    if (cur !== base) return json({ conflict: true, current: cur, by: fieldBy[key] || row.updated_by, at: row.updated_at }, 409);
+    if (cur !== base) return json({ conflict: true, current: cur, by: byEntry(fieldBy[key])?.n || row.updated_by, at: row.updated_at }, 409);
     if (value === '') delete content[key]; else content[key] = value;
-    fieldBy[key] = user.displayName;
+    if (value === '') delete fieldBy[key];
+    else { const prev = byEntry(fieldBy[key]), all = [...(prev?.all || []).filter(n => n !== user.displayName), user.displayName]; fieldBy[key] = { n: user.displayName, at: nowIso(), all }; }
     const saved = row
       ? await env.DB.prepare('UPDATE planning_sections SET content=?,field_by=?,revision=revision+1,updated_by=?,updated_at=? WHERE id=? AND revision=? RETURNING *').bind(JSON.stringify(content), JSON.stringify(fieldBy), user.displayName, nowIso(), section, row.revision).first()
       : await env.DB.prepare('INSERT INTO planning_sections (id,content,field_by,revision,updated_by,updated_at) VALUES (?,?,?,1,?,?) ON CONFLICT(id) DO NOTHING RETURNING *').bind(section, JSON.stringify(content), JSON.stringify(fieldBy), user.displayName, nowIso()).first();
