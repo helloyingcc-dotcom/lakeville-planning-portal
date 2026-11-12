@@ -127,11 +127,12 @@ tr.click{cursor:pointer}tr.click:hover td{background:#f8f9fc}
 'use strict';
 const LION = '__LION_DATA__';
 /* ---------------- sample data (fictional) ---------------- */
+const QTYPES = { text: 'Short answer', number: 'Number', select: 'Dropdown', check: 'Checkbox' };
 const EVENTS = [
-  { id: 'gn', name: 'Family Game Night', date: 'Fri, Feb 5', time: '5:00–8:00 PM', place: 'Gym & classrooms', price: 10, unit: 'family', note: 'Two sessions; pick your top 3 games when you arrive.' },
-  { id: 'sd', name: 'Sweetheart Dance', date: 'Fri, Feb 12', time: '6:00–8:00 PM', place: 'Cafeteria', price: 8, unit: 'child', note: 'Wristbands at the door for paid tickets.' },
-  { id: 'ln', name: 'Literacy Night', date: 'Thu, Mar 4', time: '6:00–7:30 PM', place: 'Library', price: 0, unit: 'family', note: 'Free event. Optional pizza pre-order ($5 for 2 slices).', extra: 'Pizza orders (2 slices, $5 each)' },
-  { id: 'cs', name: 'Car Show', date: 'Sat, May 15', time: '10:00 AM–2:00 PM', place: 'Front lot · 3 entrances', price: 5, unit: 'person', note: 'Pay at any of the three entrances.' }
+  { id: 'gn', name: 'Family Game Night', date: 'Fri, Feb 5', time: '5:00–8:00 PM', place: 'Gym & classrooms', price: 10, unit: 'family', note: 'Two sessions; pick your top 3 games when you arrive.', questions: [{ id: 'q1', label: 'Family T-shirt size (optional)', type: 'select', options: ['Youth S', 'Youth M', 'Adult M', 'Adult L'], required: false }] },
+  { id: 'sd', name: 'Sweetheart Dance', date: 'Fri, Feb 12', time: '6:00–8:00 PM', place: 'Cafeteria', price: 8, unit: 'child', note: 'Wristbands at the door for paid tickets.', questions: [] },
+  { id: 'ln', name: 'Literacy Night', date: 'Thu, Mar 4', time: '6:00–7:30 PM', place: 'Library', price: 0, unit: 'family', note: 'Free event. Optional pizza pre-order ($5 for 2 slices).', extra: 'Pizza orders (2 slices, $5 each)', questions: [] },
+  { id: 'cs', name: 'Car Show', date: 'Sat, May 15', time: '10:00 AM–2:00 PM', place: 'Front lot · 3 entrances', price: 5, unit: 'person', note: 'Pay at any of the three entrances.', questions: [{ id: 'q2', label: 'Bringing a car to show?', type: 'check', required: false }] }
 ];
 const LAST = ['Lee','Chen','Wong','Smith','Kim','Patel','Garcia','Nguyen','Brown','Rossi','Cohen','Okafor','Silva','Murphy','Tanaka','Haddad','Novak','Ali','Park','Lopez','Fischer','Rivera'];
 const FIRST = ['Ava','Leo','Mia','Noah','Zoe','Eli','Ivy','Max','Lily','Sam','Ruby','Owen','Nora','Jack','Ella','Theo','Maya','Finn','Aria','Kai','June','Luca','Rosa','Ezra'];
@@ -240,10 +241,10 @@ function qrSvg(code) { // sample code pattern (not a scannable QR) seeded from t
   return `<svg class="qr" viewBox="0 0 ${n} ${n}" role="img" aria-label="Sample ticket code ${esc(code)}">${cells.map(([x, y]) => `<rect x="${x}" y="${y}" width="1" height="1"/>`).join('')}</svg>`;
 }
 /* ---------------- PTA admin ---------------- */
-const NAV = [['dash', '▦', 'Dashboard'], ['import', '⤓', 'Import sign-ups'], ['regs', '👥', 'Registrations'], ['desk', '✓', 'Check-in desk'], ['pay', '$', 'Payments'], ['review', '☑', 'Pre-event review'], ['reports', '↓', 'Reports & export'], ['emails', '✉', 'Automated emails']];
+const NAV = [['dash', '▦', 'Dashboard'], ['form', '✎', 'Sign-up form'], ['import', '⤓', 'Import (Google Forms)'], ['regs', '👥', 'Registrations'], ['desk', '✓', 'Check-in desk'], ['pay', '$', 'Payments'], ['review', '☑', 'Pre-event review'], ['reports', '↓', 'Reports & export'], ['emails', '✉', 'Automated emails']];
 function admin() {
   const ev = evOf(S.ev), list = famsOf(S.ev);
-  const body = { dash, importView, regs, desk, pay, review, reports, emails }[S.view === 'import' ? 'importView' : S.view](ev, list);
+  const body = { dash, formView, importView, regs, desk, pay, review, reports, emails }[S.view === 'import' ? 'importView' : S.view === 'form' ? 'formView' : S.view](ev, list);
   return `<div class="admin"><aside class="side">
     <div class="brand"><img src="${LION}" alt=""><div>Lakeville PTA<small>Events</small></div></div>
     ${NAV.map(([id, ic, label]) => `<button data-act="view" data-v="${id}" ${S.view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${ic}</span>${label}</button>`).join('')}
@@ -274,7 +275,7 @@ function dash(ev, list) {
 }
 function importView(ev) {
   const imp = S.imp && S.imp.ev === ev.id ? S.imp : null, last = S.lastImport[ev.id];
-  const head0 = head('Import sign-ups', `${esc(ev.name)} · families sign up on the PTA’s Google Form`, '');
+  const head0 = head('Import from Google Forms', `${esc(ev.name)} · optional, for events that still use a Google Form or spreadsheet`, '');
   if (!imp) return head0 + `<div class="grid2"><div class="card" style="display:grid;gap:12px;align-content:start">
       <h3>1 · Get the latest responses</h3>
       <p class="muted">In Google Forms, open the event’s form → Responses → Download (.csv). Upload the whole file each time: families already imported are recognized by email and never get a second ticket.</p>
@@ -301,6 +302,30 @@ function importView(ev) {
     ${plan.map(p => `<tr><td>${LBL[p.status]}</td><td><b>${esc(p.parent)}</b></td><td class="hide-sm">${esc(p.email)}</td><td class="muted">${p.status === 'skip' ? esc(p.why) : esc(p.members.map(m => m.name.split(' ')[0]).join(', ')) + (p.method ? ' · ' + esc(p.method) : '')}${p.status === 'update' ? ' · ticket stays the same' : ''}</td></tr>`).join('')}
     </tbody></table></div>
     <div style="display:flex;gap:8px"><button class="btn" data-act="impgo" ${c('new') + c('update') ? '' : 'disabled'}>Import & email tickets</button><button class="btn ghost" data-act="impback">Back to matching</button></div></div>`;
+}
+function formView(ev) {
+  const link = 'events.dbyshop.com/lakeville/' + ev.id;
+  return head('Sign-up form', `${esc(ev.name)} · what families fill in`, `<button class="btn ghost" data-act="copylink">Copy sign-up link</button>`) +
+  `<div class="grid2"><div style="display:grid;gap:12px;align-content:start">
+    <div class="card" style="display:grid;gap:8px"><h3>Sign-up link</h3><code>${esc(link)}</code><p class="muted">Share it in your newsletter or class emails. Families get their QR ticket by email the moment they sign up.</p></div>
+    <div class="card" style="display:grid;gap:8px"><h3>Always asked</h3><p class="muted">Parent/guardian name · email · students and grades · other adults coming${ev.price || ev.extra ? ' · how they’ll pay (Zelle, cash, check, envelope)' : ''}${ev.extra ? ' · ' + esc(ev.extra) : ''}</p></div>
+    <div class="card" style="display:grid;gap:8px"><h3>Your questions for this event</h3>
+      ${ev.questions.length ? ev.questions.map(q => `<div class="row"><div class="grow"><b>${esc(q.label)}</b><small>${QTYPES[q.type]}${q.options ? ': ' + esc(q.options.join(', ')) : ''}${q.required ? ' · required' : ''}</small></div><button class="btn ghost sm" data-act="delq" data-v="${q.id}">Remove</button></div>`).join('') : '<p class="muted">No extra questions yet.</p>'}
+    </div></div>
+  <div class="card" style="display:grid;gap:10px;align-content:start"><h3>Add a question</h3>
+    <label class="f">Question<input type="text" id="qLabel" placeholder="e.g. Any food allergies?"></label>
+    <label class="f">Answer type<select id="qType">${Object.entries(QTYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+    <label class="f">Choices (for a dropdown, separated by commas)<input type="text" id="qOpts" placeholder="e.g. Session 1, Session 2"></label>
+    <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="qReq"> Required</label>
+    <button class="btn" data-act="addq">Add question</button>
+    <div class="note">Switch to <b>Parent</b> to see it on the sign-up page right away.</div>
+  </div></div>`;
+}
+function qField(q) {
+  const n = 'cq_' + q.id, req = q.required ? 'required' : '';
+  if (q.type === 'select') return `<label class="f">${esc(q.label)}<select name="${n}" ${req}><option value="">Choose…</option>${(q.options || []).map(o => `<option>${esc(o)}</option>`).join('')}</select></label>`;
+  if (q.type === 'check') return `<label style="display:flex;gap:8px;align-items:center;font-size:13px;font-weight:600;color:#4b5563"><input type="checkbox" name="${n}" ${req}> ${esc(q.label)}</label>`;
+  return `<label class="f">${esc(q.label)}<input type="${q.type === 'number' ? 'number' : 'text'}" name="${n}" ${req} ${q.type === 'number' ? 'min="0"' : ''}></label>`;
 }
 function startImport(ev, name, text) {
   const { headers, rows } = parseCsv(text);
@@ -399,7 +424,6 @@ function parent() {
 function signup(ev) {
   return `<button class="back" data-act="pev" data-v="">← All events</button>
   <div class="card" style="display:grid;gap:6px"><h2 style="color:var(--navy)">${esc(ev.name)}</h2><span class="muted">${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.place)}</span><p>${esc(ev.note)}</p></div>
-  <div class="note">In the real app this is the PTA’s <b>Google Form</b> for the event (prototype stand-in). Answers go to Google Forms first, then the PTA imports them.</div>
   <form class="card" style="display:grid;gap:10px" data-form="signup">
     <label class="f">Parent / guardian name<input type="text" name="parent" required placeholder="Your name"></label>
     <label class="f">Email for your ticket<input type="email" name="email" required placeholder="you@example.com"></label>
@@ -408,8 +432,9 @@ function signup(ev) {
       <div class="kid"><input type="text" name="kid2" placeholder="Another student (optional)"><select name="g2" style="width:80px">${['K', '1', '2', '3', '4', '5'].map(g => `<option>${g}</option>`).join('')}</select></div></div>
     <label class="f">Other adults coming<input type="number" name="adults" min="0" value="0"></label>
     ${ev.extra ? `<label class="f">${esc(ev.extra)}<input type="number" name="pizza" min="0" value="0"></label>` : ''}
+    ${ev.questions.map(qField).join('')}
     ${ev.price || ev.extra ? `<label class="f">How will you pay?<select name="method"><option>Zelle</option><option>Cash</option><option>Check</option><option>Envelope to school</option></select></label><small class="muted">The PTA confirms your payment and your ticket updates automatically.</small>` : ''}
-    <button class="btn" type="submit">Submit form</button></form>`;
+    <button class="btn" type="submit">Sign up</button></form>`;
 }
 function ticketCard(f) {
   const ev = evOf(f.ev);
@@ -459,6 +484,12 @@ document.addEventListener('click', e => {
       const rows = [['Family', 'Email', 'Students', 'People', 'Checked in', 'Payment', 'Method', 'Amount', 'Ticket', ...extraCols]].concat(list.map(f => [f.parent, f.email, f.members.filter(m => m.grade).map(m => m.name).join('; '), people(f), inCount(f), f.status, f.method, amount(f), f.code, ...extraCols.map(c => f.other?.[c] || '')]));
       const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = evOf(S.ev).name.replace(/\s+/g, '-').toLowerCase() + '-registrations.csv'; document.body.append(a); a.click(); a.remove(); toast('CSV downloaded'); return; }
     case 'pv': S.pv = v; S.pev = null; break;
+    case 'addq': { const ev = evOf(S.ev), label = $('#qLabel').value.trim(), type = $('#qType').value, opts = $('#qOpts').value.split(',').map(x => x.trim()).filter(Boolean);
+      if (!label) { toast('Type the question first'); return; }
+      if (type === 'select' && opts.length < 2) { toast('Add at least two choices for a dropdown'); return; }
+      ev.questions.push({ id: 'q' + Date.now(), label, type, options: type === 'select' ? opts : undefined, required: $('#qReq').checked }); toast('Question added'); return; }
+    case 'delq': { const ev = evOf(S.ev); ev.questions = ev.questions.filter(q => q.id !== v); break; }
+    case 'copylink': toast('Sign-up link copied'); return;
     case 'gform': { const ev = evOf(S.ev); startImport(ev, ev.name + ' (Responses).csv', toCsv(FORM_HEADERS(ev), RESP[ev.id])); break; }
     case 'imppreview': S.maps[S.imp.ev] = { ...S.imp.map }; S.imp.step = 'preview'; break;
     case 'impback': S.imp.step = 'map'; break;
@@ -492,10 +523,16 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('submit', e => {
   if (e.target.dataset.form !== 'signup') return; e.preventDefault();
-  const d = new FormData(e.target), ev = evOf(S.pev), H = FORM_HEADERS(ev);
-  const vals = [new Date().toLocaleString(), d.get('parent'), d.get('email'), d.get('kid1'), d.get('kid1') ? d.get('g1') : '', d.get('kid2'), d.get('kid2') ? d.get('g2') : '', d.get('adults'), ...(ev.extra ? [d.get('pizza')] : []), ...(ev.price || ev.extra ? [d.get('method')] : [])];
-  RESP[ev.id].push(Object.fromEntries(H.map((h, i) => [h, String(vals[i] ?? '').trim()])));
-  S.myEmail = String(d.get('email')).trim().toLowerCase(); S.pv = 'sent'; S.pev = null; S.ev = ev.id; S.imp = null;
+  const d = new FormData(e.target), ev = evOf(S.pev), last = String(d.get('parent')).trim().split(' ').pop();
+  const kids = [[d.get('kid1'), d.get('g1')], [d.get('kid2'), d.get('g2')]].filter(([n]) => String(n || '').trim()).map(([n, g]) => ({ name: String(n).trim().includes(' ') ? String(n).trim() : String(n).trim() + ' ' + last, grade: g, in: false }));
+  const adults = [{ name: String(d.get('parent')).trim(), in: false }, ...Array.from({ length: Math.min(9, +d.get('adults') || 0) }, (_, i) => ({ name: i ? 'Guest ' + (i + 1) + ' of ' + last : 'Guest of ' + last, in: false }))];
+  const other = {}; ev.questions.forEach(q => { const v = q.type === 'check' ? (d.get('cq_' + q.id) ? 'Yes' : '') : String(d.get('cq_' + q.id) || '').trim(); if (v) other[q.label] = v; });
+  const email = String(d.get('email')).trim().toLowerCase();
+  const existing = fams.find(f => f.ev === ev.id && f.email.toLowerCase() === email);
+  if (existing) { S.myEmail = email; S.pv = 'tickets'; S.pev = null; toast('You’re already signed up. Your ticket is below.'); return; }
+  const f = { id: 'me' + Date.now(), ev: ev.id, code: (ev.id + '-' + Math.floor(Math.random() * 9000 + 1000)).toUpperCase(), parent: adults[0].name, email, members: [...adults, ...kids], status: ev.price || +d.get('pizza') ? 'pending' : 'verified', method: String(d.get('method') || '').replace(/envelope.*/i, 'Envelope'), pizza: +d.get('pizza') || 0, other, sent: true, walkin: false, checkins: [] };
+  fams.push(f); S.myEmail = email; S.pv = 'tickets'; S.pev = null; S.ev = ev.id;
+  toast('You’re signed up! Ticket emailed to ' + email); return;
   render();
 });
 render();

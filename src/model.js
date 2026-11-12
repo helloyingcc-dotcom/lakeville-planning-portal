@@ -6,7 +6,8 @@ const OWNER_SECTIONS=['preview','pro'];
 const TIERS={base:{name:'School-Year Essentials',price:'$249 per school year',blurb:'Everything in the plan Lakeville is subscribing to.'},pro:{name:'School-Year Pro',price:'Upgrade pricing to come',blurb:'Optional extras. Tell us what interests you; nothing here is built yet.'}};
 // [key, title, description, tier]  base = included in the subscription, pro = higher tier (not built yet)
 const features=[
-['import','Registration import','Bring in sign-ups from Google Forms or a CSV file.','base'],
+['signupform','Built-in sign-up page','Families sign up in the app and get their QR ticket right away. Each event adds its own questions.','base'],
+['import','Registration import','Already using Google Forms or a spreadsheet? Bring those sign-ups in from a CSV file.','base'],
 ['checkin','QR code check-in','Quick check-in for students, parents and guests.','base'],
 ['attendees','Attendee management','See registration details, search by name or QR code, and spot no-shows.','base'],
 ['payment','Payment tracking','Record Zelle, cash and check payments and mark them verified.','base'],
@@ -19,7 +20,6 @@ const features=[
 ['budget','Event budgets & profit','Compare money in and money out for every event.','pro'],
 ['reimburse','Volunteer reimbursements','Volunteers submit receipts; treasurer approves repayment.','pro'],
 ['onlinepay','Online card payments','Families pay event fees by card inside the app.','pro'],
-['signupform','Built-in registration forms','Families register directly in the app, no Google Forms needed.','pro'],
 ['shifts','Volunteer shift sign-ups','Volunteers pick jobs and time slots themselves.','pro'],
 ['capacity','Capacity & waitlists','Limit spaces and manage a waiting list automatically.','pro'],
 ['refunds','Cancellations & refunds','Handle cancellation requests and refund follow-up.','pro'],
@@ -28,9 +28,7 @@ const features=[
 ['accounting','Accounting connection','Send event money in and out to your bookkeeping system.','pro']];
 // "Looking ahead": Lakeville-facing questions about possible future upgrades (the Pro list, minus anything offered in Essentials).
 // [feature id, question, hint]. Never name the tier or a price here.
-// Built-in sign-up (no Google Forms) is an upgrade: decided Nov 11.
 const AHEAD=[
-['signupform','Would you like families to sign up inside the app instead of a Google Form?','Your plan uses your Google Forms: a volunteer downloads the responses and uploads them, then tickets go out. In-app sign-up would send each family’s ticket the moment they register, with no downloading or uploading.'],
 ['onlinepay','Would families ever pay by credit or debit card in the app?','Today your plan tracks Zelle, cash, check and envelope payments. Card payments would go straight to the PTA’s own account, with a small card fee per payment.'],
 ['vendors','Do you need a place to track vendors and event expenses?','For example food trucks, a DJ, rentals or supplies: quotes, purchases and receipts for each event.'],
 ['budget','Would you like to plan a budget for each event?','Set a budget, then see money in vs. money out and what each event raised.'],
