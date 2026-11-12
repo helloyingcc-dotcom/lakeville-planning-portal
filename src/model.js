@@ -62,6 +62,42 @@ const INCLUDED=[
 ['Communication',['Automatic confirmations and reminders','Email everyone registered for an event, or just one grade','See how many emails were delivered and opened','An events calendar families can add to their phone']],
 ['Reports',['Live dashboard: registered, checked in, attendance rate, payments, with adult and kid totals','Pre-event review of who’s registered, paid, pending or missing details','No-shows list after each event','Filter families by grade or teacher/class','See who ordered extras (like pizza) and how each question was answered','Reports by grade and teacher, with Excel/CSV export']],
 ['Everything else',['Unlimited events all school year, and the app stays on over the summer and school breaks so you can plan and set up ahead','Works on any phone, tablet or computer','A “Get started” checklist, plus setup, training, email support and updates from DBY']]];
+// Grey example answers shown in empty boxes (placeholder text). Event fields use the key without its number (eventName…).
+const EX={
+completedBy:'Jessie (PTA president), Jimmy (treasurer)',
+goal:'Stop chasing envelopes and paper lists; check families in faster at the door',
+eventName:'Family Game Night',
+eventTeam:'Jimmy and the events committee',
+eventProcess:'Google Form for sign-ups, $10 by Zelle or cash in an envelope, printed list at the door, checked off by hand',
+eventPain:'Matching Zelle payments to families, and a long line at the door while we search the paper list',
+eventBetter:'Families get a ticket right away, we can see who has paid, and volunteers scan tickets on their phones',
+tools:'Google Forms (sign-ups), Zelle (payments), Excel (lists), email and the school newsletter',
+moreEvents:'We also do a book fair and spirit nights, but those are run by the school',
+additional:'Something you’d like that isn’t listed above',
+firstVersion:'QR check-in and payment tracking for Game Night',
+volume:'About 6 events a year, 150–300 families each',
+platform:'A website that works on phones; no app download',
+registration:'One registration per family; grandparents and walk-ins are welcome',
+communication:'School newsletter, email, the PTA Facebook group',
+timing:'Family Game Night in February',
+decision:'Jessie and the PTA board',
+success:'No line at the door, and we know who paid without counting envelopes',
+accountingTools:'Zelle into the PTA bank account; the treasurer keeps an Excel ledger',
+pricingCore:'Not sure',
+financialOwner:'Jimmy (treasurer) reconciles; the president approves refunds',
+financialData:'Event name, family, amount, how they paid, refunded or not',
+retention:'Payment records for 7 years for the PTA’s taxes',
+open:'Anything you’re wondering about',
+event:'Family Game Night',
+exceptions:'Event fills up, a family cancels, a check bounces, someone shows up without signing up',
+lead:'Each event has a chair; the president approves before it goes out to families',
+admin:'The president, handed over each June to the new board',
+volunteer:'Check families in and see paid / not paid; no access to email addresses',
+parent:'Sign up, see their ticket, change who’s coming or cancel',
+sensitive:'Only board members can export lists or see payment details',
+aheadOther:'An idea you’ve had, or something another school does that you like',
+_notes:'How you’d use it, or how you handle it today',
+_step:'Today: … / Better: …'};
 const MAX_EVENTS=10, EVENT_FIELDS=6;
 const EVENT_ORDER=['1st: set this one up first','2nd','3rd','Later in the year','Not sure yet'];
 const PRIORITY=['Must Have','Nice to Have','Not Sure'];
@@ -78,5 +114,5 @@ preview:[f('works','What already fits Lakeville in this draft?'),f('changes','Wh
 workflow:[f('event','Which event are you describing?','Pick one of the events from Current events.'),...steps.map((s,i)=>f('step'+i,s,'Describe Lakeville today and how you would improve this step.')),f('exceptions','What happens when something changes?','Full event, cancellation, failed payment, walk-in or missing volunteer.'),f('lead','PTA lead / event organizer','Who plans events? Can they publish or do they need approval?'),f('admin','App administrator','Who manages access, approvals and officer handover?'),f('volunteer','Volunteer','What may they see or change? Who may check families in?'),f('parent','Parent / guardian','What should they manage for their own family?'),f('sensitive','Information and permissions','Who may see family details, export lists and approve refunds?')],
 questions:[f('firstVersion','Which features in your plan matter most for your first event?'),f('volume','How many events and families should we plan for?'),f('platform','How should people access it?','Mobile-friendly website, app-store download or not sure?'),f('registration','How do registrations work?','By family or individual child? Are guests and walk-ins allowed?'),f('communication','How do you communicate with families today?'),f('timing','Is there a target event or launch date?'),f('decision','Who will review the concept and approve the scope?'),f('success','What would make the first event a success?'),f('accountingTools','What do you use for bookkeeping and payments today?'),{key:'accountingNeed',label:'What does “accounting together” mean?',options:['Show event totals','Sync payments, fees and refunds','Manage full PTA bookkeeping','Not Sure']},f('pricingCore','What accounting functions in DBY’s existing system would be useful?','Describe what already exists or mark Not Sure. Integration is not connected in this portal.'),f('financialOwner','Who reconciles payments and approves refunds?'),f('financialData','What should flow between the systems?','For example event reference, transaction reference, amount, fee, refund and payout status.'),f('retention','What information must be kept, and for how long?'),f('open','Other questions or ideas')]
 };
-return {INCLUDED,AHEAD,INTEREST,MAX_EVENTS,EVENT_FIELDS,EVENT_ORDER,tabs,features,steps,sections,PRIORITY,SIGNAL,TIERS,OWNER_SECTIONS,INTRO_KEY:'intro'};
+return {EX,INCLUDED,AHEAD,INTEREST,MAX_EVENTS,EVENT_FIELDS,EVENT_ORDER,tabs,features,steps,sections,PRIORITY,SIGNAL,TIERS,OWNER_SECTIONS,INTRO_KEY:'intro'};
 })();
