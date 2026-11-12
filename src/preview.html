@@ -160,7 +160,7 @@ EVENTS.forEach(ev => {
 // a few already checked in so the dashboard has life
 fams.filter(f => f.ev === 'gn').slice(0, 6).forEach((f, i) => { f.members.forEach(m => m.in = true); f.checkins.push(`6:${String(12 - i).padStart(2, '0')} PM`); });
 const SENT = {};
-const S = { grade: '', teacher: '', shared: false, helper: '', imp: null, maps: {}, lastImport: {}, myEmail: '', mode: innerWidth < 600 ? 'parent' : 'admin', view: 'dash', ev: 'gn', q: '', pay: 'all', open: null, desk: '', pv: 'events', pev: null, myTickets: [], showTicket: null, toast: '' };
+const S = { grade: '', teacher: '', shared: false, helper: '', imp: null, maps: {}, lastImport: {}, myEmail: '', mode: innerWidth < 600 ? 'parent' : 'admin', view: 'dash', ev: 'gn', q: '', pay: 'all', open: null, desk: '', pv: 'events', pev: null, door: null, myTickets: [], showTicket: null, toast: '' };
 /* ---------------- spreadsheet import (sample data) ----------------
    Essentials: families sign up on the built-in page; a PTA can also import an Excel/CSV list it already has.
    The app matches columns once per event and never makes duplicates (matched by email). */
@@ -440,7 +440,16 @@ function desk(ev, list) {
     <label class="f">Payment<select id="wPay"><option value="Cash">Paid cash</option><option value="Zelle">Paid by Zelle</option><option value="">Not paid yet</option></select></label>
     <button class="btn" data-act="walkin">Add & check in</button>
     <div class="note">Paid / Not paid shows at the door so volunteers know who gets a wristband.</div>
-  </div></div>`;
+  </div></div>` + doorCard(ev, list);
+}
+function doorCard(ev, list) {
+  const selfs = list.filter(f => f.self).length;
+  return `<div class="card" style="display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;margin-top:12px;border:2px dashed #b9a6e8">
+    <div>${qrSvg('DOOR-' + ev.id.toUpperCase())}</div>
+    <div style="display:grid;gap:6px"><span class="pill" style="background:#efe8fb;color:#5b3fa8;justify-self:start">Pro · not in Essentials</span><h3>Door QR sign for self check-in</h3>
+    <p class="muted" style="margin:0">Print this sign before the event and tape it by the entrance. Families scan it with their phone camera and check themselves in, so you need fewer volunteers at the door. It only works on event day, and every self check-in shows up here live.</p>
+    <span><b>${selfs}</b> famil${selfs === 1 ? 'y' : 'ies'} checked themselves in</span>
+    <button class="btn ghost sm" style="justify-self:start" data-act="doorprint">🖨 Print the door sign</button></div></div>`;
 }
 function pay(ev, list) {
   const todo = list.filter(f => f.status !== 'verified');
@@ -489,7 +498,7 @@ function parent() {
   else if (S.pv === 'tickets') body = tickets();
   else if (S.pv === 'checkin') body = selfCheck();
   return `<div class="phone"><div class="p-head"><img src="${LION}" alt=""><div><b>Lakeville PTA</b><small>Events</small></div></div><div class="p-body">${body}</div>
-  <nav class="p-tabs">${[['events', 'Events'], ['tickets', 'My tickets'], ['checkin', 'Check in']].map(([id, l]) => `<button data-act="pv" data-v="${id}" ${S.pv === id ? 'aria-current="page"' : ''}>${l}</button>`).join('')}</nav></div>`;
+  <nav class="p-tabs">${[['events', 'Events'], ['tickets', 'My tickets'], ['checkin', 'Check in ✦']].map(([id, l]) => `<button data-act="pv" data-v="${id}" ${S.pv === id ? 'aria-current="page"' : ''}>${l}</button>`).join('')}</nav></div>`;
 }
 function signup(ev) {
   return `<button class="back" data-act="pev" data-v="">← All events</button>
@@ -520,11 +529,17 @@ function tickets() {
   return `<h2 style="color:var(--navy)">My tickets</h2>` + (mine.length ? mine.map(f => ticketCard(f) + (f.cancelled ? '' : (S.editWho === f.id ? `<div class="card" style="display:grid;gap:8px"><h3 style="color:var(--navy)">Who’s coming?</h3><p class="muted">Remove anyone who can’t make it. Your QR ticket stays the same.</p>${f.members.map((m, i) => `<div class="row"><div class="grow"><b>${esc(m.name)}</b><small>${m.grade ? 'Student · Grade ' + esc(m.grade) : 'Adult'}</small></div><button class="btn ghost sm" data-act="premove" data-v="${f.id}" data-i="${i}" ${f.members.length < 2 ? 'disabled' : ''}>Can’t come</button></div>`).join('')}<button class="btn sm" style="justify-self:start" data-act="editwho" data-v="">Done</button></div>` : `<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost sm" data-act="editwho" data-v="${f.id}">Change who’s coming</button><button class="btn ghost sm" data-act="pcancel" data-v="${f.id}">Can’t make it? Cancel my registration</button></div>`))).join('') : `<div class="card"><p>${S.myEmail ? 'Your sign-up is in. Your ticket arrives here and in your email after the PTA imports sign-ups from the form.' : 'No tickets yet. Sign up for an event using the PTA’s form; your ticket arrives by email once the PTA imports it.'}</p></div>`);
 }
 function selfCheck() {
-  const mine = myFams();
-  if (!mine.length) return `<div class="card"><p>Sign up for an event first. At the door, scan the QR code on the sign to check yourself in.</p></div>`;
-  const f = fams.find(x => x.id === S.showTicket) || mine[mine.length - 1];
+  const mine = myFams().filter(f => !f.cancelled);
+  const tag = `<div class="note" style="text-align:left"><b>Pro preview</b> (only you see this): family self check-in isn’t part of School-Year Essentials.</div>`;
+  if (!mine.length) return tag + `<div class="card"><p>Sign up for an event first. On event day, scan the QR sign at the door to check yourself in.</p></div>`;
+  if (!S.door) return tag + `<div class="card" style="display:grid;gap:10px;text-align:center;justify-items:center"><h2 style="color:var(--navy)">Arriving at an event?</h2><p class="muted">Look for the <b>Scan to check in</b> sign at the door and point your phone camera at it.</p><div style="opacity:.85">${qrSvg('DOOR-' + mine[mine.length - 1].ev.toUpperCase())}</div><button class="btn gold" data-act="doorscan" data-v="${mine[mine.length - 1].ev}">📷 Scan the door sign (demo)</button></div>`;
+  const f = mine.find(x => x.ev === S.door);
+  if (!f) return tag + `<div class="card"><p>We couldn’t find your registration for ${esc(evOf(S.door).name)}. Please see a volunteer at the door.</p><button class="btn ghost sm" data-act="doorscan" data-v="">Back</button></div>`;
+  return tag + selfCheckFam(f);
+}
+function selfCheckFam(f) {
   if (inCount(f) === people(f)) return `<div class="ok-screen ${f.status === 'verified' ? '' : 'pending'}"><div class="big">${f.status === 'verified' ? '✓' : '!'}</div><h2>${f.status === 'verified' ? 'You’re checked in!' : 'Checked in · payment pending'}</h2><p>${esc(evOf(f.ev).name)}<br>${esc(f.members.map(m => m.name.split(' ')[0]).join(', '))}</p><p><b>Show this screen to a PTA volunteer.</b></p><small>${esc(f.checkins.at(-1) || '')}</small></div>`;
-  return `<div class="card" style="display:grid;gap:10px;text-align:center;justify-items:center"><h2 style="color:var(--navy)">Self check-in</h2><p class="muted">At the door, scan the event QR sign, or tap below.</p>${ticketCard(f)}<button class="btn gold" data-act="selfin" data-v="${f.id}">I’m here: check us in</button></div>`;
+  return `<div class="card" style="display:grid;gap:10px;text-align:center;justify-items:center"><h2 style="color:var(--navy)">Self check-in</h2><p class="muted">Welcome to ${esc(evOf(f.ev).name)}! Is everyone here?</p>${ticketCard(f)}<button class="btn gold" data-act="selfin" data-v="${f.id}">I’m here: check us in</button></div>`;
 }
 /* ---------------- render + actions ---------------- */
 function render() {
@@ -590,7 +605,9 @@ document.addEventListener('click', e => {
       S.lastImport[ev.id] = { n, u, s: plan.filter(p => p.status === 'same').length, k: plan.filter(p => p.status === 'skip').length, at: 'Imported ' + nowTime() };
       S.imp = null; toast(`${n} new famil${n === 1 ? 'y' : 'ies'} imported · tickets emailed${u ? ` · ${u} updated` : ''}`); return; }
     case 'pev': S.pev = v || null; break;
-    case 'selfin': checkIn(f, f.members.map((_, i) => i)); break;
+    case 'selfin': checkIn(f, f.members.map((_, i) => i)); f.self = true; break;
+    case 'doorscan': S.door = v || null; break;
+    case 'doorprint': toast('Door sign ready to print (prototype)'); return;
   }
   render();
 });

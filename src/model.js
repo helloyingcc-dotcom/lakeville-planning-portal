@@ -12,7 +12,7 @@ const features=[
 ['attendees','Attendee management','See registration details, search by name or QR code, and spot no-shows.','base'],
 ['payment','Payment tracking','Record Zelle, cash and check payments and mark them verified.','base'],
 ['reports','Live dashboard & reports','Real-time attendance, payment status and event metrics; export to Excel/CSV.','base'],
-['events','Unlimited events','Family nights, socials and fundraisers, September to June.','base'],
+['events','Unlimited events','Family nights, socials and fundraisers all school year. The app stays on over the summer and breaks too, so you can plan and set up next year’s events.','base'],
 ['access','Volunteer access','Multiple volunteer accounts with permissions you control.','base'],
 ['reminders','Automated emails','Confirmations, reminders and event details sent for you.','base'],
 ['tickettypes','Adult & kid tickets','Set one price per family, or separate adult and kid prices. See adult and kid totals for sign-ups, check-in and reports.','base'],
@@ -30,6 +30,7 @@ const features=[
 ['capacity','Capacity & waitlists','Limit spaces and manage a waiting list automatically.','pro'],
 ['refunds','Cancellations & refunds','Handle cancellation requests and refund follow-up.','pro'],
 ['tasks','PTA task assignments','Assign and track preparation tasks before each event.','pro'],
+['selfcheckin','Family self check-in','A door QR sign for each event: families scan it with their phone when they arrive and check themselves in, so fewer volunteers are needed at the door.','pro'],
 ['reuse','Copy a past event','Start a new event from last year’s details.','pro'],
 ['accounting','Accounting connection','Send event money in and out to your bookkeeping system.','pro']];
 // "Looking ahead": Lakeville-facing questions about possible future upgrades (the Pro list, minus anything offered in Essentials).
@@ -41,6 +42,7 @@ const AHEAD=[
 ['reimburse','Should volunteers submit receipts for reimbursement in the app?','Volunteers upload a receipt and the treasurer approves repayment.'],
 ['capacity','Do any events need a spot limit or a waiting list?','For example a dance with limited space, or game sessions that fill up.'],
 ['refunds','Would you refund card payments in the app?','Cancelling is already in your plan. This is about sending money back automatically for families who paid by card.'],
+['selfcheckin','Would families check themselves in at the door with their phone?','A QR sign by the entrance on event day: families scan it and check in on their own, so fewer volunteers are needed at the check-in table. Volunteer check-in is already in your plan.'],
 ['tasks','Would you assign prep tasks to PTA members before each event?','For example “order pizza” or “print signs”, with due dates.'],
 ['reuse','Would you start next year’s event from last year’s details?','Copy an event’s settings, questions and volunteer jobs.'],
 ['accounting','Should event money in and out go to your bookkeeping system?','For example QuickBooks or a treasurer’s spreadsheet.']];
@@ -50,11 +52,11 @@ const INCLUDED=[
 ['Sign-ups',['Families sign up directly in the app: no more Google Forms. Every event gets its own sign-up page with your own questions (pizza count, T-shirt size…)','Have a list in Excel already (paper sign-ups, last year’s families)? Import it; nobody gets a duplicate ticket','One registration per family: parents, students and guests together','Separate adult and kid prices (e.g. adults $5, kids free) or one price per family']],
 ['Digital tickets',['One QR ticket per family, emailed the moment they sign up','Edit and re-send tickets for last-minute changes','An updated ✅ ticket once their payment is confirmed','Plans change? Families can remove someone who can’t come, or cancel the whole registration, right from their ticket; the PTA is notified and the head count updates']],
 ['Payment tracking',['Track Zelle, cash, check and envelope payments','Verified / Pending / Not paid for every family','Automatic reminders to families who haven’t paid']],
-['Event night check-in',['4 or more volunteers checking in at once, each on their own phone','Scan the QR code or search by parent name, student name or ticket code','Check in part of a family as they arrive, plus walk-ins at the door','Paid / Not paid shown at the door; families can also self check-in with a ✅ screen']],
+['Event night check-in',['4 or more volunteers checking in at once, each on their own phone','Scan the QR code or search by parent name, student name or ticket code','Check in part of a family as they arrive, plus walk-ins at the door','Paid / Not paid shown at the door, with a ✅ screen once a family is checked in']],
 ['Volunteers',['Volunteer slots for each event, with reminders the day before','Email your volunteers, add helpers by hand, check them in on the night','Volunteer accounts with permissions you control']],
 ['Communication',['Automatic confirmations and reminders','Email everyone registered for an event, or just one grade','See how many emails were delivered and opened','An events calendar families can add to their phone']],
 ['Reports',['Live dashboard: registered, checked in, attendance rate, payments, with adult and kid totals','Pre-event review of who’s registered, paid, pending or missing details','No-shows list after each event','Filter families by grade or teacher/class','See who ordered extras (like pizza) and how each question was answered','Reports by grade and teacher, with Excel/CSV export']],
-['Everything else',['Unlimited events, September to June','Works on any phone, tablet or computer','A “Get started” checklist, plus setup, training, email support and updates from DBY']]];
+['Everything else',['Unlimited events all school year, and the app stays on over the summer and school breaks so you can plan and set up ahead','Works on any phone, tablet or computer','A “Get started” checklist, plus setup, training, email support and updates from DBY']]];
 const MAX_EVENTS=10, EVENT_FIELDS=6;
 const EVENT_ORDER=['Model this one first','Next','Later'];
 const PRIORITY=['Must Have','Nice to Have','Not Sure'];
