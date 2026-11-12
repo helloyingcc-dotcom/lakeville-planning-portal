@@ -116,7 +116,7 @@ function renderNav() {
     h('span', { class: 'navnum' }, '0' + (i + 1)), title,
     S.dirty[id] ? h('span', { class: 'unsaved', 'aria-label': 'Unsaved changes' }) : S.records[id] ? h('span', { 'aria-label': 'Has saved answers', style: 'margin-left:auto;display:inline-flex' }, icon('check', 14)) : null)));
 }
-function setTab(id) { S.tab = id; S.error = ''; S.notice = ''; renderNav(); renderMain(); onSectionChange(); window.scrollTo(0, 0); }
+function setTab(id) { S.tab = id; S.error = ''; S.notice = ''; if (window.innerWidth > 850 && !S.commentsOpen) { S.commentsOpen = true; renderLayoutState(); renderPanel(); } renderNav(); renderMain(); onSectionChange(); window.scrollTo(0, 0); }
 
 /* ---------- main content ---------- */
 function field(f) {
