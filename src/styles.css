@@ -200,3 +200,12 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .included-group h3{margin:0 0 6px;font-size:15px;color:#1c2a4b}
 .included-group ul{margin:0;padding-left:18px;display:grid;gap:4px;font-size:13.5px;line-height:1.45}
 .included-group li::marker{color:#e2a634}
+
+.presence-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}
+.presence-list li{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--line,#dde3d6);border-radius:10px;background:#fff}
+.presence-dot{width:10px;height:10px;border-radius:50%;background:#c7ccc4}
+.presence-dot.on{background:#2e9e5b;box-shadow:0 0 0 3px #2e9e5b33}
+.presence-name,.presence-when{display:grid;gap:2px}
+.presence-when{text-align:right;font-size:.9rem}
+.presence-name small,.presence-when small{color:#6b7a73;font-size:.78rem}
+.presence-online{color:#2e7d4f}

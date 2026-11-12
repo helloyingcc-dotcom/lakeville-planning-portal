@@ -29,6 +29,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS comment_threads (seq INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, id TEXT NOT NULL UNIQUE, section TEXT NOT NULL, field_key TEXT, quote TEXT NOT NULL, resolved INTEGER DEFAULT 0 NOT NULL, revision INTEGER DEFAULT 1 NOT NULL, created_by TEXT NOT NULL, created_name TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS comment_messages (seq INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, request_id TEXT NOT NULL UNIQUE, thread_id TEXT NOT NULL REFERENCES comment_threads(id), author_id TEXT NOT NULL, author_name TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL, edited_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS comment_attachments (id TEXT PRIMARY KEY NOT NULL, object_key TEXT NOT NULL, author_id TEXT NOT NULL, name TEXT NOT NULL, content_type TEXT NOT NULL, size INTEGER NOT NULL, created_at TEXT NOT NULL, message_id TEXT REFERENCES comment_messages(request_id))`,
+  `CREATE TABLE IF NOT EXISTS presence (email TEXT PRIMARY KEY NOT NULL, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL, visits INTEGER DEFAULT 1 NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS people (email TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS comment_messages_thread ON comment_messages(thread_id, seq)`,
   `CREATE TABLE IF NOT EXISTS answer_files (id TEXT PRIMARY KEY NOT NULL, object_key TEXT NOT NULL, section TEXT NOT NULL, field_key TEXT NOT NULL, author_id TEXT NOT NULL, author_name TEXT NOT NULL, name TEXT NOT NULL, content_type TEXT NOT NULL, size INTEGER NOT NULL, created_at TEXT NOT NULL)`,
@@ -461,6 +462,21 @@ function setupPage(title, lines) {
   return page(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lakeville PTA Planning</title><style>body{font-family:Arial,sans-serif;background:#f6f7f3;color:#243c35;display:grid;place-items:center;min-height:100vh;margin:0;padding:20px}div{max-width:560px;background:#fff;border:1px solid #dde3d6;border-radius:12px;padding:28px}h1{font-family:Georgia,serif;font-weight:400}li{margin:8px 0;line-height:1.5}</style></head><body><div><h1>${esc(title)}</h1><ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul></div></body></html>`, 403);
 }
 
+/* ---------------- presence (who has been here; owner only) ---------------- */
+async function touchPresence(env, user) {
+  const now = new Date(), iso = now.toISOString();
+  const recent = new Date(now - 30e3).toISOString(), newVisit = new Date(now - 30 * 60e3).toISOString();
+  await env.DB.prepare(`INSERT INTO presence (email, first_seen, last_seen, visits) VALUES (?1, ?2, ?2, 1)
+    ON CONFLICT(email) DO UPDATE SET visits = visits + (CASE WHEN last_seen < ?4 THEN 1 ELSE 0 END), last_seen = ?2 WHERE last_seen < ?3`).bind(user.email, iso, recent, newVisit).run();
+}
+async function presenceGet(env, user) {
+  if (!user.isOwner) return json({ error: 'Only DBY can see this.' }, 403);
+  const owners = String(env.OWNER_EMAILS || '').toLowerCase().split(/[\s,;]+/).filter(Boolean);
+  const r = await env.DB.prepare('SELECT p.email, p.first_seen, p.last_seen, p.visits, n.name FROM presence p LEFT JOIN people n ON n.email = p.email ORDER BY p.last_seen DESC').all();
+  const cutoff = Date.now() - 2 * 60e3;
+  return json({ people: r.results.filter(x => !owners.includes(x.email)).map(x => ({ name: x.name || nameFromEmail(x.email), email: x.email, firstSeen: x.first_seen, lastSeen: x.last_seen, visits: x.visits, online: Date.parse(x.last_seen) > cutoff })) });
+}
+
 /* ---------------- router ---------------- */
 async function handle(request, env) {
   const url = new URL(request.url), path = url.pathname, method = request.method;
@@ -474,6 +490,7 @@ async function handle(request, env) {
     if (path.startsWith('/api/')) return json({ error: 'Your sign-in has expired. Reload the page to sign in again.' }, 401);
     return setupPage('Sign-in required', ['This portal is private. Open it from the link you were sent and sign in with your invited email address.', 'If you just signed in, reload the page.']);
   }
+  await touchPresence(env, user).catch(() => null);
   if (method !== 'GET' && method !== 'HEAD') {
     const origin = request.headers.get('Origin');
     if (origin !== url.origin) return json({ error: 'Request not allowed.' }, 403);
@@ -481,6 +498,7 @@ async function handle(request, env) {
   try {
     if (path === '/' && method === 'GET') return page(HTML);
     if (path === '/app-preview.html' && method === 'GET') return user.isOwner ? page(PREVIEW_HTML) : json({ error: 'Not found.' }, 404);
+    if (path === '/api/presence' && method === 'GET') return await presenceGet(env, user);
     if (path === '/api/me') {
       if (method === 'GET') return json({ email: user.email, name: user.displayName, named: user.named, isOwner: user.isOwner, attachments: !!env.BUCKET, version: VERSION });
       if (method === 'PUT') return mePut(request, env, user);

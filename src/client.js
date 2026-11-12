@@ -257,6 +257,7 @@ function tabBody(tab) {
     const pro = features.filter(x => x[3] === 'pro');
     return [
       h('div', { class: 'owner-note' }, '🔒 Only you can see this page. Jessie and Jimmy never see the Pro tier, its fields or your notes.'),
+      h('section', { class: 'panel', id: 'presence' }, presenceView()),
       h('div', { class: 'tier-head' }, h('div', null, h('span', { class: 'eyebrow' }, 'HIGHER TIER · NOT BUILT'), h('h2', null, TIERS.pro.name), h('p', null, 'Mark how strongly Lakeville’s answers point to each feature. Strong signals across enough features make the case for building Pro.')), h('span', { class: 'tier-price pro' }, TIERS.pro.price)),
       h('div', { class: 'prioritykey' }, [['Strong signal', 'They clearly asked for it'], ['Some signal', 'Hinted at it'], ['No signal yet', 'Not mentioned']].map(([a, b]) => h('span', null, h('strong', null, a), ' ' + b))),
       h('div', { class: 'featurelist' }, pro.map(([id, title, desc]) => h('section', { class: 'feature tier-pro' },
@@ -944,6 +945,26 @@ async function flagCall(fn) {
   finally { F.busy = false; F.last = ''; renderFlagSlots(true); pollFlags(); }
 }
 
+/* ---------- who's been here (owner only) ---------- */
+const P = { people: null, last: '' };
+const ago = iso => { const m = Math.round((Date.now() - Date.parse(iso)) / 60e3); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' hr ago' : fmtTime(iso); };
+function presenceView() {
+  const ppl = P.people;
+  return [h('h2', null, 'Who’s been here'),
+    h('p', { class: 'muted' }, 'Lakeville people who have opened the portal. Green means they have it open right now. Someone you invited who isn’t listed hasn’t signed in yet.'),
+    ppl === null ? h('p', { class: 'muted' }, 'Loading…') : !ppl.length ? h('p', null, 'No one from Lakeville has signed in yet.') :
+    h('ul', { class: 'presence-list' }, ppl.map(x => h('li', null,
+      h('span', { class: 'presence-dot' + (x.online ? ' on' : ''), title: x.online ? 'Online now' : 'Offline' }),
+      h('span', { class: 'presence-name' }, h('strong', null, x.name), h('small', null, x.email)),
+      h('span', { class: 'presence-when' }, x.online ? h('strong', { class: 'presence-online' }, 'Online now') : 'Last here ' + ago(x.lastSeen),
+        h('small', null, 'First signed in ' + fmtTime(x.firstSeen) + ' · ' + x.visits + (x.visits === 1 ? ' visit' : ' visits'))))))];
+}
+async function pollPresence() {
+  if (!S.me?.isOwner || document.hidden) return;
+  try { const p = await api('/api/presence'), snap = JSON.stringify(p.people); if (snap !== P.last) { P.last = snap; P.people = p.people; } } catch { if (P.people === null) P.people = []; }
+  const el = $('presence'); if (el) fill(el, presenceView());
+}
+
 /* ---------- start ---------- */
 window.addEventListener('beforeunload', e => {
   const unsentComments = Object.values(T.drafts).some(v => v.trim()) || C.uploading || Object.values(C.drafts).some(v => v.trim()) || Object.values(C.uploads).some(v => v.length);
@@ -951,7 +972,7 @@ window.addEventListener('beforeunload', e => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { pollFlags(); syncPlan(); pollList(); pollThread(); pollTeam(); } });
 let flagTick = 0;
-setInterval(() => { syncPlan(); pollList(); pollThread(); if (++flagTick % 3 === 0) pollFlags(); if (S.commentsOpen && S.panelView === 'team') pollTeam(); }, 2000);
+setInterval(() => { syncPlan(); pollList(); pollThread(); if (++flagTick % 3 === 0) pollFlags(); if (flagTick % 10 === 1) pollPresence(); if (S.commentsOpen && S.panelView === 'team') pollTeam(); }, 2000);
 renderShell();
 api('/api/me').then(me => { S.me = me; tabs = me.isOwner ? allTabs : allTabs.filter(t => !ownerOnly(t[0])); renderNav(); renderMain(); renderPanel(); pollTeam(); }).catch(e => { S.error = errMsg(e, 'Could not check your sign-in.'); renderMain(); });
 load();
