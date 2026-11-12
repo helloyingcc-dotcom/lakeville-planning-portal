@@ -22,6 +22,7 @@ const features=[
 ['items','Items & answers report','See who ordered extras like pizza, how many, and how every sign-up question was answered.','base'],
 ['calendar','Events calendar','All upcoming events on one page; families add them to their phone calendar.','base'],
 ['announce','Email registered families','Send a quick update to everyone signed up for an event: parking, weather, what to bring.','base'],
+['vip','VIP guests','Mark special guests like the superintendent as VIPs with a free ticket; volunteers get a “please greet” alert when they arrive.','base'],
 ['mobile','Phone-friendly','Easy to use on a phone, especially at the check-in table.','base'],
 ['vendors','Vendor & expense tracking','Track vendors, quotes, purchases and receipts for each event.','pro'],
 ['budget','Event budgets & profit','Compare money in and money out for every event.','pro'],
@@ -32,6 +33,7 @@ const features=[
 ['tasks','PTA task assignments','Assign and track preparation tasks before each event.','pro'],
 ['selfcheckin','Family self check-in','A door QR sign for each event: families scan it with their phone when they arrive and check themselves in, so fewer volunteers are needed at the door.','pro'],
 ['runofshow','Run of show','A minute-by-minute schedule for event night: who does what and when (doors open, raffle, announcements, cleanup), shared with volunteers on their phones.','pro'],
+['seating','Assigned seating','Give VIPs or families a row and seat number (e.g. Row C, Seat 219), shown on their ticket and at check-in.','pro'],
 ['reuse','Copy a past event','Start a new event from last year’s details.','pro'],
 ['accounting','Accounting connection','Send event money in and out to your bookkeeping system.','pro']];
 // "Looking ahead": Lakeville-facing questions about possible future upgrades (the Pro list, minus anything offered in Essentials).
@@ -45,6 +47,7 @@ const AHEAD=[
 ['refunds','Would you refund card payments in the app?','Cancelling is already in your plan. This is about sending money back automatically for families who paid by card.'],
 ['selfcheckin','Would families check themselves in at the door with their phone?','A QR sign by the entrance on event day: families scan it and check in on their own, so fewer volunteers are needed at the check-in table. Volunteer check-in is already in your plan.'],
 ['runofshow','Would a run of show help on event night?','A minute-by-minute schedule of who does what and when (doors open 5:30, raffle 6:15, announcements, cleanup), that volunteers can see on their phones.'],
+['seating','Do any events need assigned seats?','For example a reserved seat for the superintendent (Row C, Seat 219), or numbered seats for a show. VIP guests with a free ticket and a greeting alert are already in your plan.'],
 ['tasks','Would you assign prep tasks to PTA members before each event?','For example “order pizza” or “print signs”, with due dates.'],
 ['reuse','Would you start next year’s event from last year’s details?','Copy an event’s settings, questions and volunteer jobs.'],
 ['accounting','Should event money in and out go to your bookkeeping system?','For example QuickBooks or a treasurer’s spreadsheet.']];
@@ -54,7 +57,7 @@ const INCLUDED=[
 ['Sign-ups',['Families sign up directly in the app: no more Google Forms. Every event gets its own sign-up page with your own questions (pizza count, T-shirt size…)','Have a list in Excel already (paper sign-ups, last year’s families)? Import it; nobody gets a duplicate ticket','One registration per family: parents, students and guests together','Separate adult and kid prices (e.g. adults $5, kids free) or one price per family']],
 ['Digital tickets',['One QR ticket per family, emailed the moment they sign up','Edit and re-send tickets for last-minute changes','An updated ✅ ticket once their payment is confirmed','Plans change? Families can remove someone who can’t come, or cancel the whole registration, right from their ticket; the PTA is notified and the head count updates']],
 ['Payment tracking',['Track Zelle, cash, check and envelope payments','Verified / Pending / Not paid for every family','Automatic reminders to families who haven’t paid']],
-['Event night check-in',['4 or more volunteers checking in at once, each on their own phone','Scan the QR code or search by parent name, student name or ticket code','Check in part of a family as they arrive, plus walk-ins at the door','Paid / Not paid shown at the door, with a ✅ screen once a family is checked in']],
+['Event night check-in',['4 or more volunteers checking in at once, each on their own phone','Scan the QR code or search by parent name, student name or ticket code','Check in part of a family as they arrive, plus walk-ins at the door','Paid / Not paid shown at the door, with a ✅ screen once a family is checked in','VIP guests (like the superintendent) get a free ticket, and volunteers get a “please greet” alert when they arrive']],
 ['Volunteers',['Volunteer slots for each event, with reminders the day before','Email your volunteers, add helpers by hand, check them in on the night','Volunteer accounts with permissions you control']],
 ['Communication',['Automatic confirmations and reminders','Email everyone registered for an event, or just one grade','See how many emails were delivered and opened','An events calendar families can add to their phone']],
 ['Reports',['Live dashboard: registered, checked in, attendance rate, payments, with adult and kid totals','Pre-event review of who’s registered, paid, pending or missing details','No-shows list after each event','Filter families by grade or teacher/class','See who ordered extras (like pizza) and how each question was answered','Reports by grade and teacher, with Excel/CSV export']],
