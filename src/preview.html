@@ -155,9 +155,9 @@ EVENTS.forEach(ev => {
 fams.filter(f => f.ev === 'gn').slice(0, 6).forEach((f, i) => { f.members.forEach(m => m.in = true); f.checkins.push(`6:${String(12 - i).padStart(2, '0')} PM`); });
 const SENT = {};
 const S = { shared: false, helper: '', imp: null, maps: {}, lastImport: {}, myEmail: '', mode: innerWidth < 600 ? 'parent' : 'admin', view: 'dash', ev: 'gn', q: '', pay: 'all', open: null, desk: '', pv: 'events', pev: null, myTickets: [], showTicket: null, toast: '' };
-/* ---------------- Google Form responses (simulated) ----------------
-   Essentials: each event's sign-up is a Google Form run by the PTA. A volunteer downloads the
-   responses as CSV and imports them; the app matches columns once and never makes duplicates. */
+/* ---------------- spreadsheet import (sample data) ----------------
+   Essentials: families sign up on the built-in page; a PTA can also import an Excel/CSV list it already has.
+   The app matches columns once per event and never makes duplicates (matched by email). */
 const FORM_HEADERS = ev => ['Timestamp', 'Parent/guardian name', 'Email address', 'Student name', 'Student grade', 'Second student (optional)', 'Second student grade', 'Other adults coming', ...(ev.extra ? [ev.extra] : []), ...(ev.price || ev.extra ? ['How will you pay?'] : []), ...(ev.id === 'gn' ? ['Family T-shirt size (optional)'] : [])];
 const RESP = {};
 EVENTS.forEach((ev, k) => {
@@ -242,7 +242,7 @@ function qrSvg(code) { // sample code pattern (not a scannable QR) seeded from t
   return `<svg class="qr" viewBox="0 0 ${n} ${n}" role="img" aria-label="Sample ticket code ${esc(code)}">${cells.map(([x, y]) => `<rect x="${x}" y="${y}" width="1" height="1"/>`).join('')}</svg>`;
 }
 /* ---------------- PTA admin ---------------- */
-const NAV = [['dash', '▦', 'Dashboard'], ['form', '✎', 'Sign-up form'], ['vols', '🙋', 'Volunteers'], ['mail', '✉', 'Email families'], ['import', '⤓', 'Import (Google Forms)'], ['regs', '👥', 'Registrations'], ['desk', '✓', 'Check-in desk'], ['pay', '$', 'Payments'], ['review', '☑', 'Pre-event review'], ['reports', '↓', 'Reports & export'], ['emails', '⚙', 'Automated emails']];
+const NAV = [['dash', '▦', 'Dashboard'], ['form', '✎', 'Sign-up form'], ['vols', '🙋', 'Volunteers'], ['mail', '✉', 'Email families'], ['import', '⤓', 'Import a spreadsheet'], ['regs', '👥', 'Registrations'], ['desk', '✓', 'Check-in desk'], ['pay', '$', 'Payments'], ['review', '☑', 'Pre-event review'], ['reports', '↓', 'Reports & export'], ['emails', '⚙', 'Automated emails']];
 function admin() {
   const ev = evOf(S.ev), list = famsOf(S.ev);
   const body = { dash, formView, volsView, mailView, importView, regs, desk, pay, review, reports, emails }[{ import: 'importView', form: 'formView', vols: 'volsView', mail: 'mailView' }[S.view] || S.view](ev, list);
@@ -279,13 +279,13 @@ function dash(ev, list) {
 }
 function importView(ev) {
   const imp = S.imp && S.imp.ev === ev.id ? S.imp : null, last = S.lastImport[ev.id];
-  const head0 = head('Import from Google Forms', `${esc(ev.name)} · optional, for events that still use a Google Form or spreadsheet`, '');
+  const head0 = head('Import a spreadsheet', `${esc(ev.name)} · optional: bring in a list you already have in Excel or CSV`, '');
   if (!imp) return head0 + `<div class="grid2"><div class="card" style="display:grid;gap:12px;align-content:start">
       <h3>1 · Get the latest responses</h3>
-      <p class="muted">In Google Forms, open the event’s form → Responses → Download (.csv). Upload the whole file each time: families already imported are recognized by email and never get a second ticket.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="gform">Download from Google Forms (simulated)</button>
+      <p class="muted">Save your list from Excel as a .csv file and upload it. You can upload an updated list anytime: families already in the app are recognized by email and never get a second ticket.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="gform">Use a sample list</button>
       <label class="btn ghost" style="cursor:pointer">Upload a CSV file<input type="file" accept=".csv,text/csv" data-act="csvfile" hidden></label></div>
-      <div class="note">${RESP[ev.id].length} responses in this event’s form so far (sample data${S.myEmail ? ', plus anything you submit as a parent' : ''}).</div>
+      <div class="note">The sample list has ${RESP[ev.id].length} families (made up), including one already signed up, to show how duplicates are handled.</div>
     </div>
     <div class="card" style="display:grid;gap:8px;align-content:start"><h3>Last import</h3>${last ? `<p><b>${last.n}</b> new · <b>${last.u}</b> updated · <b>${last.s}</b> unchanged${last.k ? ` · <b>${last.k}</b> skipped` : ''}</p><p class="muted">${esc(last.at)} · tickets emailed to new families</p>` : '<p class="muted">Not imported yet.</p>'}
       <div class="note">Volunteers can import as often as they like. Tickets go out when a family is imported, so importing every day or two keeps families from waiting.</div></div></div>`;
@@ -547,7 +547,7 @@ document.addEventListener('click', e => {
       ev.questions.push({ id: 'q' + Date.now(), label, type, options: type === 'select' ? opts : undefined, required: $('#qReq').checked }); toast('Question added'); return; }
     case 'delq': { const ev = evOf(S.ev); ev.questions = ev.questions.filter(q => q.id !== v); break; }
     case 'copylink': S.shared = true; toast('Sign-up link copied'); return;
-    case 'gform': { const ev = evOf(S.ev); startImport(ev, ev.name + ' (Responses).csv', toCsv(FORM_HEADERS(ev), RESP[ev.id])); break; }
+    case 'gform': { const ev = evOf(S.ev); startImport(ev, ev.name + ' families.csv', toCsv(FORM_HEADERS(ev), RESP[ev.id])); break; }
     case 'imppreview': S.maps[S.imp.ev] = { ...S.imp.map }; S.imp.step = 'preview'; break;
     case 'impback': S.imp.step = 'map'; break;
     case 'impcancel': S.imp = null; break;
