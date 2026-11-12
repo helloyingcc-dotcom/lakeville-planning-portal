@@ -126,6 +126,27 @@ function byLine(tab, key) {
   return [icon('pencil', 12), h('span', null, h('strong', null, b.n), b.at ? ' · ' + fmtTime(b.at) : '', others.length ? ' · also edited by ' + others.join(', ') : '')];
 }
 function renderByLines() { for (const el of document.querySelectorAll('[data-by]')) { const [tab, key] = el.dataset.by.split(':'); fill(el, byLine(tab, key)); } }
+// When someone adds to an answer another person wrote, label each part with who wrote it:
+// "Jessie Y: …" then a new line "Jimmy: " ready for their addition. Nothing is added if they leave without typing.
+const LBL = {};
+function labelOnFocus(tab, key, el) {
+  if (ownerOnly(tab) || !S.me) return;
+  const text = el.value, me = S.me.name, last = S.records[tab]?.answeredBy?.[key]?.n;
+  if (!text.trim() || !last || last === me) return;
+  const labelled = /^[^\n:]{1,40}: /.test(text) ? text : last + ': ' + text;
+  const added = labelled.replace(/\s+$/, '') + '\n\n' + me + ': ';
+  LBL[key] = { before: text, added };
+  el.value = added; el.setSelectionRange(added.length, added.length);
+}
+function labelOnBlur(key, el) {
+  const l = LBL[key]; delete LBL[key];
+  if (l && el.value === l.added) el.value = l.before;
+  else if (l) {
+    const tail = '\n\n' + S.me.name + ': ';   // they edited the earlier text but added nothing new: drop the empty label
+    if (el.value.endsWith(tail)) el.value = el.value.slice(0, -tail.length);
+    if (el.value !== l.before) change(key, el.value);
+  }
+}
 function field(f) {
   const tab = S.tab, id = fieldId(tab, f.key), count = countFor(tab, f.key);
   const disabled = !S.loaded;
@@ -134,7 +155,7 @@ function field(f) {
     ? h('select', { id, 'aria-label': f.label, disabled, onchange: e => change(f.key, e.target.value) }, h('option', { value: '' }, dyn.length ? 'Choose an event' : 'Add events on the Current events page first'), dyn.map(o => h('option', { value: o }, o)))
     : f.options
     ? h('select', { id, 'aria-label': f.label, disabled, onchange: e => change(f.key, e.target.value) }, h('option', { value: '' }, 'Choose one'), f.options.map(o => h('option', { value: o }, o)))
-    : h('textarea', { id, 'aria-label': f.label, rows: (f.key.includes('Name') || f.key === 'completedBy') ? 2 : 3, maxlength: 6000, disabled, placeholder: exampleFor(f.key), oninput: e => change(f.key, e.target.value) });
+    : h('textarea', { id, 'aria-label': f.label, rows: (f.key.includes('Name') || f.key === 'completedBy') ? 2 : 3, maxlength: 6000, disabled, placeholder: exampleFor(f.key), oninput: e => change(f.key, e.target.value), onfocus: e => labelOnFocus(tab, f.key, e.target), onblur: e => labelOnBlur(f.key, e.target), onclick: e => { const l = LBL[f.key]; if (l && e.target.value === l.added) e.target.setSelectionRange(l.added.length, l.added.length); } });
   control.value = current()[f.key] || '';
   return h('div', { class: 'field' },
     h('div', { class: 'field-heading' }, h('label', { for: id }, f.label),
