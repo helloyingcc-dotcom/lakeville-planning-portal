@@ -129,11 +129,17 @@ const LION = '__LION_DATA__';
 /* ---------------- sample data (fictional) ---------------- */
 const QTYPES = { text: 'Short answer', number: 'Number', select: 'Dropdown', check: 'Checkbox' };
 const EVENTS = [
-  { id: 'gn', name: 'Family Game Night', date: 'Fri, Feb 5', time: '5:00–8:00 PM', place: 'Gym & classrooms', price: 10, unit: 'family', note: 'Two sessions; pick your top 3 games when you arrive.', ics: ['20270205T170000', '20270205T200000'], slots: [{ id: 's1', role: 'Ticket table', time: '4:30–6:00 PM', need: 2, people: ['Grace Haddad'] }, { id: 's2', role: 'Game hosts', time: '5:00–8:00 PM', need: 6, people: ['Daniel Lee', 'Amy Chen', 'Raj Patel'] }, { id: 's3', role: 'Clean-up crew', time: '8:00–8:30 PM', need: 3, people: [] }], questions: [{ id: 'q1', label: 'Family T-shirt size (optional)', type: 'select', options: ['Youth S', 'Youth M', 'Adult M', 'Adult L'], required: false }] },
-  { id: 'sd', name: 'Sweetheart Dance', date: 'Fri, Feb 12', time: '6:00–8:00 PM', place: 'Cafeteria', price: 8, unit: 'child', note: 'Wristbands at the door for paid tickets.', ics: ['20270212T180000', '20270212T200000'], slots: [{ id: 's4', role: 'Door & wristbands', time: '5:45–7:00 PM', need: 2, people: [] }], questions: [] },
-  { id: 'ln', name: 'Literacy Night', date: 'Thu, Mar 4', time: '6:00–7:30 PM', place: 'Library', price: 0, unit: 'family', note: 'Free event. Optional pizza pre-order ($5 for 2 slices).', extra: 'Pizza orders (2 slices, $5 each)', ics: ['20270304T180000', '20270304T193000'], slots: [{ id: 's5', role: 'Pizza table', time: '5:45–7:00 PM', need: 2, people: ['Maria Garcia'] }], questions: [] },
-  { id: 'cs', name: 'Car Show', date: 'Sat, May 15', time: '10:00 AM–2:00 PM', place: 'Front lot · 3 entrances', price: 5, unit: 'person', note: 'Pay at any of the three entrances.', ics: ['20270515T100000', '20270515T140000'], slots: [{ id: 's6', role: 'Entrance gates (2 per gate)', time: '9:30 AM–2:00 PM', need: 6, people: ['Sean Murphy', 'Yuki Tanaka'] }], questions: [{ id: 'q2', label: 'Bringing a car to show?', type: 'check', required: false }] }
+  { id: 'gn', name: 'Family Game Night', date: 'Fri, Feb 5', time: '5:00–8:00 PM', place: 'Gym & classrooms', pricing: 'family', price: 10, adult: 0, kid: 0, note: 'Two sessions; pick your top 3 games when you arrive.', ics: ['20270205T170000', '20270205T200000'], slots: [{ id: 's1', role: 'Ticket table', time: '4:30–6:00 PM', need: 2, people: ['Grace Haddad'] }, { id: 's2', role: 'Game hosts', time: '5:00–8:00 PM', need: 6, people: ['Daniel Lee', 'Amy Chen', 'Raj Patel'] }, { id: 's3', role: 'Clean-up crew', time: '8:00–8:30 PM', need: 3, people: [] }], questions: [{ id: 'q1', label: 'Family T-shirt size (optional)', type: 'select', options: ['Youth S', 'Youth M', 'Adult M', 'Adult L'], required: false }] },
+  { id: 'sd', name: 'Sweetheart Dance', date: 'Fri, Feb 12', time: '6:00–8:00 PM', place: 'Cafeteria', pricing: 'person', price: 0, adult: 0, kid: 8, note: 'Kids $8; parents and guardians free. Wristbands at the door for paid tickets.', ics: ['20270212T180000', '20270212T200000'], slots: [{ id: 's4', role: 'Door & wristbands', time: '5:45–7:00 PM', need: 2, people: [] }], questions: [] },
+  { id: 'ln', name: 'Literacy Night', date: 'Thu, Mar 4', time: '6:00–7:30 PM', place: 'Library', pricing: 'person', price: 0, adult: 0, kid: 0, note: 'Free event. Optional pizza pre-order ($5 for 2 slices).', extra: 'Pizza orders (2 slices, $5 each)', ics: ['20270304T180000', '20270304T193000'], slots: [{ id: 's5', role: 'Pizza table', time: '5:45–7:00 PM', need: 2, people: ['Maria Garcia'] }], questions: [] },
+  { id: 'cs', name: 'Car Show', date: 'Sat, May 15', time: '10:00 AM–2:00 PM', place: 'Front lot · 3 entrances', pricing: 'person', price: 0, adult: 5, kid: 2, note: 'Adults $5, kids $2. Pay at any of the three entrances.', ics: ['20270515T100000', '20270515T140000'], slots: [{ id: 's6', role: 'Entrance gates (2 per gate)', time: '9:30 AM–2:00 PM', need: 6, people: ['Sean Murphy', 'Yuki Tanaka'] }], questions: [{ id: 'q2', label: 'Bringing a car to show?', type: 'check', required: false }] }
 ];
+const kidsOf = f => f.members.filter(m => m.grade).length, adultsOf = f => f.members.length - kidsOf(f);
+const ak = f => `${adultsOf(f)} adult${adultsOf(f) === 1 ? '' : 's'} · ${kidsOf(f)} kid${kidsOf(f) === 1 ? '' : 's'}`;
+const sumAK = list => ({ a: list.reduce((n, f) => n + adultsOf(f), 0), k: list.reduce((n, f) => n + kidsOf(f), 0), ai: list.reduce((n, f) => n + f.members.filter(m => !m.grade && m.in).length, 0), ki: list.reduce((n, f) => n + f.members.filter(m => m.grade && m.in).length, 0) });
+const hasFee = ev => ev.pricing === 'family' ? ev.price > 0 : ev.adult > 0 || ev.kid > 0;
+const priceText = ev => ev.pricing === 'family' ? (ev.price ? money(ev.price) + ' per family' : 'Free') : !hasFee(ev) ? 'Free' : [['Adults', ev.adult], ['Kids', ev.kid]].map(([l, v]) => l + ' ' + (v ? money(v) : 'free')).join(' · ');
+const TEACHERS = { K: ['Ms. Allen', 'Mr. Brooks'], 1: ['Ms. Diaz', 'Mrs. Evans'], 2: ['Mr. Foster', 'Ms. Grant'], 3: ['Ms. Rivera', 'Mr. Hall'], 4: ['Mrs. Ito', 'Mr. Jones'], 5: ['Ms. King', 'Mr. Lowe'] };
 const LAST = ['Lee','Chen','Wong','Smith','Kim','Patel','Garcia','Nguyen','Brown','Rossi','Cohen','Okafor','Silva','Murphy','Tanaka','Haddad','Novak','Ali','Park','Lopez','Fischer','Rivera'];
 const FIRST = ['Ava','Leo','Mia','Noah','Zoe','Eli','Ivy','Max','Lily','Sam','Ruby','Owen','Nora','Jack','Ella','Theo','Maya','Finn','Aria','Kai','June','Luca','Rosa','Ezra'];
 const PARENT = ['Grace','Daniel','Amy','Mark','Jenny','Raj','Maria','Linh','Chris','Sofia','Rachel','Tunde','Paula','Sean','Yuki','Omar','Ana','Sara','Min','Carlos','Heidi','Luis'];
@@ -144,25 +150,25 @@ EVENTS.forEach(ev => {
   const n = ev.id === 'cs' ? 14 : 20;
   for (let i = 0; i < n; i++) {
     const last = LAST[(i + ev.id.charCodeAt(0)) % LAST.length], kids = 1 + Math.floor(rnd() * 3);
-    const students = Array.from({ length: kids }, (_, k) => ({ name: FIRST[(i * 3 + k + ev.id.length) % FIRST.length] + ' ' + last, grade: ['K', '1', '2', '3', '4', '5'][Math.floor(rnd() * 6)], in: false }));
+    const students = Array.from({ length: kids }, (_, k) => ({ name: FIRST[(i * 3 + k + ev.id.length) % FIRST.length] + ' ' + last, grade: ['K', '1', '2', '3', '4', '5'][Math.floor(rnd() * 6)], in: false })).map(k => ({ ...k, teacher: TEACHERS[k.grade][Math.floor(rnd() * 2)] }));
     const adults = [{ name: PARENT[(i + ev.id.charCodeAt(1)) % PARENT.length] + ' ' + last, in: false }];
     if (rnd() > .55) adults.push({ name: 'Guest of ' + last, in: false });
-    const r = rnd(), status = ev.price === 0 && !ev.extra ? 'verified' : r < .7 ? 'verified' : r < .88 ? 'pending' : 'unpaid';
+    const r = rnd(), status = !hasFee(ev) && !ev.extra ? 'verified' : r < .7 ? 'verified' : r < .88 ? 'pending' : 'unpaid';
     fams.push({ id: ev.id + i, ev: ev.id, code: (ev.id + '-' + (1000 + i * 37)).toUpperCase(), parent: adults[0].name, email: adults[0].name.toLowerCase().replace(/\s+/g, '.') + '@example.com', members: [...adults, ...students], status, method: status === 'unpaid' ? '' : METHODS[Math.floor(rnd() * 4)], pizza: ev.extra ? Math.floor(rnd() * 3) : 0, sent: rnd() > .1, walkin: false, checkins: [] });
   }
 });
 // a few already checked in so the dashboard has life
 fams.filter(f => f.ev === 'gn').slice(0, 6).forEach((f, i) => { f.members.forEach(m => m.in = true); f.checkins.push(`6:${String(12 - i).padStart(2, '0')} PM`); });
 const SENT = {};
-const S = { shared: false, helper: '', imp: null, maps: {}, lastImport: {}, myEmail: '', mode: innerWidth < 600 ? 'parent' : 'admin', view: 'dash', ev: 'gn', q: '', pay: 'all', open: null, desk: '', pv: 'events', pev: null, myTickets: [], showTicket: null, toast: '' };
+const S = { grade: '', teacher: '', shared: false, helper: '', imp: null, maps: {}, lastImport: {}, myEmail: '', mode: innerWidth < 600 ? 'parent' : 'admin', view: 'dash', ev: 'gn', q: '', pay: 'all', open: null, desk: '', pv: 'events', pev: null, myTickets: [], showTicket: null, toast: '' };
 /* ---------------- spreadsheet import (sample data) ----------------
    Essentials: families sign up on the built-in page; a PTA can also import an Excel/CSV list it already has.
    The app matches columns once per event and never makes duplicates (matched by email). */
-const FORM_HEADERS = ev => ['Timestamp', 'Parent/guardian name', 'Email address', 'Student name', 'Student grade', 'Second student (optional)', 'Second student grade', 'Other adults coming', ...(ev.extra ? [ev.extra] : []), ...(ev.price || ev.extra ? ['How will you pay?'] : []), ...(ev.id === 'gn' ? ['Family T-shirt size (optional)'] : [])];
+const FORM_HEADERS = ev => ['Timestamp', 'Parent/guardian name', 'Email address', 'Student name', 'Student grade', 'Second student (optional)', 'Second student grade', 'Other adults coming', ...(ev.extra ? [ev.extra] : []), ...(hasFee(ev) || ev.extra ? ['How will you pay?'] : []), ...(ev.id === 'gn' ? ['Family T-shirt size (optional)'] : [])];
 const RESP = {};
 EVENTS.forEach((ev, k) => {
   const H = FORM_HEADERS(ev), row = (vals) => Object.fromEntries(H.map((h, i) => [h, vals[i] ?? '']));
-  const pay = ev.price || ev.extra ? ['Zelle'] : [];
+  const pay = hasFee(ev) || ev.extra ? ['Zelle'] : [];
   const extra = ev.extra ? ['1'] : [];
   RESP[ev.id] = [
     row(['11/9/2026 18:02', 'Priya Shah', 'priya.shah@example.com', 'Anika Shah', '2', '', '', '1', ...extra, ...pay]),
@@ -176,7 +182,7 @@ EVENTS.forEach((ev, k) => {
 });
 // Game Night's team added their own question; the app keeps it as an "other answer"
 RESP.gn.forEach((r, i) => { r['Family T-shirt size (optional)'] = ['Youth M', 'Adult L', '', 'Youth S'][i] || ''; });
-const APP_FIELDS = ev => [['parent', 'Parent name', true], ['email', 'Email', true], ['kid1', 'Student name', true], ['g1', 'Student grade'], ['kid2', 'Second student'], ['g2', 'Second student grade'], ['adults', 'Other adults coming'], ...(ev.extra ? [['pizza', ev.extra]] : []), ...(ev.price || ev.extra ? [['method', 'Payment method']] : [])];
+const APP_FIELDS = ev => [['parent', 'Parent name', true], ['email', 'Email', true], ['kid1', 'Student name', true], ['g1', 'Student grade'], ['kid2', 'Second student'], ['g2', 'Second student grade'], ['adults', 'Other adults coming'], ...(ev.extra ? [['pizza', ev.extra]] : []), ...(hasFee(ev) || ev.extra ? [['method', 'Payment method']] : [])];
 function guessMap(ev, headers) {
   const pick = (re, not) => headers.find(h => re.test(h) && !(not && not.test(h))) || '';
   const kid = /student|child|kid/i, second = /second|2nd|another|\b2\b/i;
@@ -228,7 +234,7 @@ const famsOf = id => fams.filter(f => f.ev === id && !f.cancelled);
 const allFamsOf = id => fams.filter(f => f.ev === id);
 const people = f => f.members.length;
 const inCount = f => f.members.filter(m => m.in).length;
-const amount = f => { const ev = evOf(f.ev); const base = ev.unit === 'family' ? ev.price : ev.unit === 'child' ? ev.price * f.members.filter(m => m.grade).length : ev.price * people(f); return base + (f.pizza || 0) * 5; };
+const amount = f => { const ev = evOf(f.ev); const base = ev.pricing === 'family' ? ev.price : adultsOf(f) * ev.adult + kidsOf(f) * ev.kid; return base + (f.pizza || 0) * 5; };
 const money = n => '$' + n.toLocaleString();
 const initials = n => n.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 const PILL = { verified: '<span class="pill verified">✓ Verified</span>', pending: '<span class="pill pending">● Pending</span>', unpaid: '<span class="pill unpaid">✕ Not paid</span>', cancelled: '<span class="pill" style="background:#eceef2;color:#5b6170">Cancelled</span>' };
@@ -255,7 +261,7 @@ function admin() {
 }
 function head(title, sub, right = '') { return `<div class="top"><div><h1>${title}</h1><p class="muted">${sub}</p></div>${right}</div>`; }
 function dash(ev, list) {
-  const reg = list.reduce((n, f) => n + people(f), 0), ins = list.reduce((n, f) => n + inCount(f), 0);
+  const reg = list.reduce((n, f) => n + people(f), 0), ins = list.reduce((n, f) => n + inCount(f), 0), T = sumAK(list);
   const ver = list.filter(f => f.status === 'verified'), pen = list.filter(f => f.status === 'pending'), un = list.filter(f => f.status === 'unpaid');
   const pct = list.length ? Math.round(ver.length / list.length * 100) : 0, a = ver.length / (list.length || 1) * 360, b = a + pen.length / (list.length || 1) * 360;
   const recent = list.filter(f => f.checkins.length).slice(-6).reverse();
@@ -264,8 +270,8 @@ function dash(ev, list) {
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px">${steps.map(([t, ok, go]) => `<div class="check" style="border:0;padding:4px 0"><span class="n ${ok ? 'ok' : 'warn'}" style="min-width:24px;height:24px">${ok ? '✓' : '•'}</span><span class="grow">${t}</span>${!ok && go ? `<button class="btn ghost sm" data-act="view" data-v="${go}">Go</button>` : ''}</div>`).join('')}</div></div>` : '';
   return head(esc(ev.name), `${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.place)}`, `<button class="btn" data-act="view" data-v="desk">Open check-in desk</button>`) + starter +
   `<div class="stats">
-    <div class="card stat"><div class="ic" style="background:#e6ecfa">👥</div><div><b>${reg}</b><span>Registered guests</span></div></div>
-    <div class="card stat"><div class="ic" style="background:#e3f4ea">✓</div><div><b>${ins}</b><span>Checked in</span></div></div>
+    <div class="card stat"><div class="ic" style="background:#e6ecfa">👥</div><div><b>${reg}</b><span>Registered guests</span><span style="display:block">${T.a} adults · ${T.k} kids</span></div></div>
+    <div class="card stat"><div class="ic" style="background:#e3f4ea">✓</div><div><b>${ins}</b><span>Checked in</span><span style="display:block">${T.ai} adults · ${T.ki} kids</span></div></div>
     <div class="card stat"><div class="ic" style="background:#f1e9fb">%</div><div><b>${reg ? Math.round(ins / reg * 100) : 0}%</b><span>Attendance rate</span></div></div>
     <div class="card stat"><div class="ic" style="background:#fff1d6">$</div><div><b>${money(ver.reduce((n, f) => n + amount(f), 0))}</b><span>Payments verified</span></div></div>
   </div>
@@ -313,7 +319,11 @@ function formView(ev) {
   return head('Sign-up form', `${esc(ev.name)} · what families fill in`, `<button class="btn ghost" data-act="copylink">Copy sign-up link</button>`) +
   `<div class="grid2"><div style="display:grid;gap:12px;align-content:start">
     <div class="card" style="display:grid;gap:8px"><h3>Sign-up link</h3><code>${esc(link)}</code><p class="muted">Share it in your newsletter or class emails. Families get their QR ticket by email the moment they sign up.</p></div>
-    <div class="card" style="display:grid;gap:8px"><h3>Always asked</h3><p class="muted">Parent/guardian name · email · students and grades · other adults coming${ev.price || ev.extra ? ' · how they’ll pay (Zelle, cash, check, envelope)' : ''}${ev.extra ? ' · ' + esc(ev.extra) : ''}</p></div>
+    <div class="card" style="display:grid;gap:8px"><h3>Ticket prices</h3>
+      <label class="f">How you charge<select data-act="pricing"><option value="family" ${ev.pricing === 'family' ? 'selected' : ''}>One price per family</option><option value="person" ${ev.pricing === 'person' ? 'selected' : ''}>Separate adult and kid prices</option></select></label>
+      ${ev.pricing === 'family' ? `<label class="f">Family price ($)<input type="number" min="0" step="0.5" value="${ev.price}" data-act="price" data-k="price"></label>` : `<div style="display:flex;gap:8px"><label class="f" style="flex:1">Adult ($)<input type="number" min="0" step="0.5" value="${ev.adult}" data-act="price" data-k="adult"></label><label class="f" style="flex:1">Kid ($)<input type="number" min="0" step="0.5" value="${ev.kid}" data-act="price" data-k="kid"></label></div>`}
+      <small class="muted">Families see: ${esc(priceText(ev))}. Use $0 for free.</small></div>
+    <div class="card" style="display:grid;gap:8px"><h3>Always asked</h3><p class="muted">Parent/guardian name · email · students and grades · other adults coming${hasFee(ev) || ev.extra ? ' · how they’ll pay (Zelle, cash, check, envelope)' : ''}${ev.extra ? ' · ' + esc(ev.extra) : ''}</p></div>
     <div class="card" style="display:grid;gap:8px"><h3>Your questions for this event</h3>
       ${ev.questions.length ? ev.questions.map(q => `<div class="row"><div class="grow"><b>${esc(q.label)}</b><small>${QTYPES[q.type]}${q.options ? ': ' + esc(q.options.join(', ')) : ''}${q.required ? ' · required' : ''}</small></div><button class="btn ghost sm" data-act="delq" data-v="${q.id}">Remove</button></div>`).join('') : '<p class="muted">No extra questions yet.</p>'}
     </div></div>
@@ -381,22 +391,26 @@ function startImport(ev, name, text) {
 }
 function filtered(list) {
   const q = S.q.trim().toLowerCase();
-  return list.filter(f => (S.pay === 'all' || f.status === S.pay) && (!q || f.code.toLowerCase().includes(q) || f.members.some(m => m.name.toLowerCase().includes(q))));
+  return list.filter(f => (S.pay === 'all' || f.status === S.pay) && (!S.grade || f.members.some(m => m.grade === S.grade)) && (!S.teacher || f.members.some(m => m.teacher === S.teacher)) && (!q || f.code.toLowerCase().includes(q) || f.members.some(m => m.name.toLowerCase().includes(q))));
 }
 function regs(ev, list) {
   const cancelled = allFamsOf(ev.id).filter(f => f.cancelled);
   const rows = filtered([...list, ...cancelled]);
-  return head('Registrations', `${list.length} families · ${list.reduce((n, f) => n + people(f), 0)} people · ${esc(ev.name)}`, `<button class="btn ghost" data-act="view" data-v="reports">Export</button>`) +
+  const T = sumAK(list);
+  return head('Registrations', `${list.length} families · ${T.a + T.k} people (${T.a} adults, ${T.k} kids) · ${esc(ev.name)}`, `<button class="btn ghost" data-act="view" data-v="reports">Export</button>`) +
   `<div class="toolbar"><input type="text" id="q" placeholder="Search parent or student name, or ticket code" value="${esc(S.q)}" data-act="q">
+    <select data-act="gradef" aria-label="Grade filter"><option value="">All grades</option>${['K', '1', '2', '3', '4', '5'].map(g => `<option value="${g}" ${S.grade === g ? 'selected' : ''}>${g === 'K' ? 'Kindergarten' : 'Grade ' + g}</option>`).join('')}</select>
+    <select data-act="teacherf" aria-label="Teacher filter"><option value="">All teachers</option>${[...new Set(list.flatMap(f => f.members.map(m => m.teacher)).filter(Boolean))].sort().map(t => `<option ${S.teacher === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
     <select data-act="payf" aria-label="Payment filter">${[['all', 'All payments'], ['verified', 'Verified'], ['pending', 'Pending'], ['unpaid', 'Not paid']].map(([v, l]) => `<option value="${v}" ${S.pay === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
   <div class="card" style="padding:4px 8px;overflow:auto"><table><thead><tr><th>Family</th><th>Students</th><th class="hide-sm">Ticket</th><th>Payment</th><th class="hide-sm">Checked in</th></tr></thead><tbody>
-  ${rows.map(f => `<tr class="click" data-act="openfam" data-v="${f.id}" ${f.cancelled ? 'style="opacity:.6"' : ''}><td><b>${esc(f.parent)}</b>${f.walkin ? ' <span class="pill in">Walk-in</span>' : ''}${f.cancelled ? ' ' + PILL.cancelled : ''}<br><small class="muted">${people(f)} people</small></td><td>${esc(f.members.filter(m => m.grade).map(m => m.name.split(' ')[0] + ' (' + m.grade + ')').join(', ') || '—')}</td><td class="hide-sm"><code>${esc(f.code)}</code></td><td>${PILL[f.status]}<br><small class="muted">${esc(f.method || '')} ${money(amount(f))}</small></td><td class="hide-sm">${inCount(f)}/${people(f)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No matches.</td></tr>'}
+  ${rows.map(f => `<tr class="click" data-act="openfam" data-v="${f.id}" ${f.cancelled ? 'style="opacity:.6"' : ''}><td><b>${esc(f.parent)}</b>${f.walkin ? ' <span class="pill in">Walk-in</span>' : ''}${f.cancelled ? ' ' + PILL.cancelled : ''}${!f.cancelled && f.removed?.length ? ' <span class="pill pending">Changed</span>' : ''}<br><small class="muted">${ak(f)}</small></td><td>${esc(f.members.filter(m => m.grade).map(m => m.name.split(' ')[0] + ' (' + m.grade + (m.teacher ? ', ' + m.teacher : '') + ')').join(', ') || '—')}</td><td class="hide-sm"><code>${esc(f.code)}</code></td><td>${PILL[f.status]}<br><small class="muted">${esc(f.method || '')} ${money(amount(f))}</small></td><td class="hide-sm">${inCount(f)}/${people(f)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No matches.</td></tr>'}
   </tbody></table></div>`;
 }
 function drawer() {
   const f = fams.find(x => x.id === S.open), ev = evOf(f.ev);
   return `<div class="drawer-bg" data-act="close"><div class="drawer" role="dialog" aria-label="Family details" data-stop>
     <div class="top" style="margin:0"><div><h1 style="font-size:18px">${esc(f.parent)}</h1><p class="muted">${esc(ev.name)} · <code>${esc(f.code)}</code></p></div><button class="btn ghost sm" data-act="close">Close</button></div>
+    ${f.removed?.length && !f.cancelled ? `<div class="note">Family update: ${f.removed.map(r => esc(r.name) + ' can’t come (' + esc(r.at) + ')').join('; ')}. Now ${people(f)} attending.${f.refundDue ? ` They overpaid ${money(f.refundDue)}. <label style="display:inline-flex;gap:6px;align-items:center">Refund: <select data-act="refund" data-v="${f.id}"><option value="">Not yet</option>${['Zelle', 'Cash', 'Check', 'No refund (donation)'].map(x => `<option ${f.refund === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label>` : ''}</div>` : ''}
     ${f.cancelled ? `<div class="note" style="background:#f6f6f7">Cancelled by the family ${esc(f.cancelled)}.${f.status === 'verified' && amount(f) ? ` They had paid ${money(amount(f))}. <label style="display:inline-flex;gap:6px;align-items:center">Refund: <select data-act="refund" data-v="${f.id}"><option value="">Not yet</option>${['Zelle', 'Cash', 'Check', 'No refund (donation)'].map(m => `<option ${f.refund === m ? 'selected' : ''}>${m}</option>`).join('')}</select></label>` : ''}</div>` : '<div class="note">Volunteers on other phones see check-ins instantly, so nobody checks in twice.</div>'}
     <div class="list">${f.members.map((m, i) => `<div class="member ${m.in ? 'on' : ''}"><div class="grow"><b>${esc(m.name)}</b><small>${m.grade ? 'Student · Grade ' + esc(m.grade) : 'Adult'}</small></div><button class="btn sm ${m.in ? 'ghost' : ''}" data-act="toggle" data-v="${f.id}" data-i="${i}">${m.in ? 'Undo' : 'Check in'}</button></div>`).join('')}</div>
     <button class="btn" data-act="allin" data-v="${f.id}">Check in whole family</button>
@@ -412,8 +426,8 @@ function drawer() {
 function desk(ev, list) {
   const q = S.desk.trim().toLowerCase();
   const hits = q.length < 2 ? [] : list.filter(f => f.code.toLowerCase() === q || f.members.some(m => m.name.toLowerCase().includes(q))).slice(0, 8);
-  const reg = list.reduce((n, f) => n + people(f), 0), ins = list.reduce((n, f) => n + inCount(f), 0);
-  return head('Check-in desk', `${esc(ev.name)} · ${ins} of ${reg} checked in`, `<button class="btn gold" data-act="scan">📷 Scan a ticket</button>`) +
+  const reg = list.reduce((n, f) => n + people(f), 0), ins = list.reduce((n, f) => n + inCount(f), 0), T = sumAK(list);
+  return head('Check-in desk', `${esc(ev.name)} · ${ins} of ${reg} checked in (adults ${T.ai}/${T.a}, kids ${T.ki}/${T.k})`, `<button class="btn gold" data-act="scan">📷 Scan a ticket</button>`) +
   `<div class="grid2"><div style="display:grid;gap:12px;align-content:start">
     <input type="text" class="desk-search" id="desk" placeholder="Type a parent or student name…" value="${esc(S.desk)}" data-act="desk" autocomplete="off">
     ${hits.map(f => `<div class="result ${inCount(f) === people(f) ? 'done' : ''}"><span class="av">${initials(f.parent)}</span><div class="grow"><b>${esc(f.parent)}</b> ${PILL[f.status]}<small>${esc(f.members.map(m => m.name.split(' ')[0]).join(', '))} · ${inCount(f)}/${people(f)} in</small></div><button class="btn sm ghost" data-act="openfam" data-v="${f.id}">Details</button><button class="btn sm" data-act="allin" data-v="${f.id}" ${inCount(f) === people(f) ? 'disabled' : ''}>${inCount(f) === people(f) ? 'All in ✓' : 'Check in all'}</button></div>`).join('')}
@@ -445,10 +459,19 @@ function review(ev, list) {
   `<div class="card">${reviewItems(list).map(([n, t, ok]) => `<div class="check"><span class="n ${ok ? 'ok' : 'warn'}">${ok ? '✓' : n}</span><span class="grow">${t}</span>${ok ? '' : `<button class="btn ghost sm" data-act="view" data-v="${t.includes('paid') ? 'pay' : 'regs'}">Review</button>`}</div>`).join('')}</div>`;
 }
 function reports(ev, list) {
-  const reg = list.reduce((n, f) => n + people(f), 0), ins = list.reduce((n, f) => n + inCount(f), 0), ver = list.filter(f => f.status === 'verified').reduce((n, f) => n + amount(f), 0);
+  const reg = list.reduce((n, f) => n + people(f), 0), ins = list.reduce((n, f) => n + inCount(f), 0), ver = list.filter(f => f.status === 'verified').reduce((n, f) => n + amount(f), 0), T = sumAK(list);
+  const grades = ['K', '1', '2', '3', '4', '5'].map(g => { const kids = list.flatMap(f => f.members.filter(m => m.grade === g)); return [g, kids.length, kids.filter(m => m.in).length, [...new Set(kids.map(m => m.teacher).filter(Boolean))].length]; });
+  const items = [];
+  if (ev.extra) { const who = list.filter(f => f.pizza); items.push([ev.extra, `${who.reduce((n, f) => n + f.pizza, 0)} orders · ${money(who.reduce((n, f) => n + f.pizza * 5, 0))}`, who.map(f => `${f.parent} (${f.pizza})`)]); }
+  ev.questions.forEach(q => { const ans = list.filter(f => f.other?.[q.label]); const counts = {}; ans.forEach(f => { counts[f.other[q.label]] = (counts[f.other[q.label]] || 0) + 1; });
+    items.push([q.label, Object.entries(counts).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'No answers yet', ans.map(f => `${f.parent} (${f.other[q.label]})`)]); });
   return head('Reports & export', esc(ev.name), '') +
-  `<div class="stats"><div class="card stat"><div><b>${list.length}</b><span>Families</span></div></div><div class="card stat"><div><b>${reg}</b><span>People registered</span></div></div><div class="card stat"><div><b>${ins}</b><span>Attended</span></div></div><div class="card stat"><div><b>${money(ver)}</b><span>Verified payments</span></div></div></div>
-  <div class="card" style="display:grid;gap:10px;justify-items:start"><h3>Download</h3><p class="muted">Opens in Excel, Numbers or Google Sheets.</p><button class="btn" data-act="csv">Download registrations (CSV)</button></div>`;
+  `<div class="stats"><div class="card stat"><div><b>${list.length}</b><span>Families</span></div></div><div class="card stat"><div><b>${reg}</b><span>People registered</span><span style="display:block">${T.a} adults · ${T.k} kids</span></div></div><div class="card stat"><div><b>${ins}</b><span>Attended</span><span style="display:block">${T.ai} adults · ${T.ki} kids</span></div></div><div class="card stat"><div><b>${money(ver)}</b><span>Verified payments</span></div></div></div>
+  <div class="grid2" style="margin-bottom:14px">
+    <div class="card"><h3>By grade</h3><table><thead><tr><th>Grade</th><th>Students</th><th>Checked in</th><th>Classes</th></tr></thead><tbody>${grades.map(([g, n, i, c]) => `<tr><td>${g === 'K' ? 'Kindergarten' : 'Grade ' + g}</td><td>${n}</td><td>${i}</td><td>${c}</td></tr>`).join('')}</tbody></table><button class="btn ghost sm" style="margin-top:10px" data-act="view" data-v="regs">Filter families by grade or teacher</button></div>
+    <div class="card" style="display:grid;gap:10px;align-content:start"><h3>Items &amp; answers</h3>${items.length ? items.map(([label, sum, who], i) => `<div><b>${esc(label)}</b><p class="muted" style="margin:2px 0">${esc(sum)}</p><details><summary style="cursor:pointer;font-size:12px;color:var(--navy)">Who (${who.length})</summary><p style="font-size:12px;margin:6px 0 0">${esc(who.join(', ')) || '—'}</p></details></div>`).join('') : '<p class="muted">This event has no extra items or questions.</p>'}</div>
+  </div>
+  <div class="card" style="display:grid;gap:10px;justify-items:start"><h3>Download</h3><p class="muted">Opens in Excel, Numbers or Google Sheets. Includes adults, kids, grades, teachers, items and answers.</p><button class="btn" data-act="csv">Download registrations (CSV)</button></div>`;
 }
 function emails(ev) {
   const box = (title, lines) => `<div class="email"><div class="head">${title}</div><div class="body">${lines}</div></div>`;
@@ -460,7 +483,7 @@ function emails(ev) {
 /* ---------------- parent phone ---------------- */
 function parent() {
   let body = '';
-  if (S.pv === 'events' && !S.pev) body = `<h2 style="color:var(--navy)">Upcoming events</h2><p class="muted" style="margin:0">The PTA’s calendar for the school year.</p>` + EVENTS.map(e => `<div class="card evcard" data-act="pev" data-v="${e.id}"><h3>${esc(e.name)}</h3><span class="muted">${esc(e.date)} · ${esc(e.time)}</span><span>${e.price ? money(e.price) + ' per ' + e.unit : 'Free'}${e.slots.some(x => x.people.length < x.need) ? ' · <span class="pill pending">Volunteers needed</span>' : ''}</span><button class="btn ghost sm" style="justify-self:start" data-act="ics" data-v="${e.id}">📅 Add to my calendar</button></div>`).join('');
+  if (S.pv === 'events' && !S.pev) body = `<h2 style="color:var(--navy)">Upcoming events</h2><p class="muted" style="margin:0">The PTA’s calendar for the school year.</p>` + EVENTS.map(e => `<div class="card evcard" data-act="pev" data-v="${e.id}"><h3>${esc(e.name)}</h3><span class="muted">${esc(e.date)} · ${esc(e.time)}</span><span>${priceText(e)}${e.slots.some(x => x.people.length < x.need) ? ' · <span class="pill pending">Volunteers needed</span>' : ''}</span><button class="btn ghost sm" style="justify-self:start" data-act="ics" data-v="${e.id}">📅 Add to my calendar</button></div>`).join('');
   else if (S.pv === 'events' && S.pev) body = signup(evOf(S.pev));
   else if (S.pv === 'sent') body = `<div class="card" style="display:grid;gap:10px;text-align:center;justify-items:center"><div class="ok-screen" style="width:100%"><div class="big">✓</div><h2>Form submitted</h2><p>Thanks! Your QR ticket will be emailed to ${esc(S.myEmail)} once the PTA imports this week’s sign-ups.</p></div><div class="note" style="text-align:left">Prototype: switch to <b>PTA team → Import sign-ups</b> to import it, then come back to <b>My tickets</b>.</div></div>`;
   else if (S.pv === 'tickets') body = tickets();
@@ -470,17 +493,17 @@ function parent() {
 }
 function signup(ev) {
   return `<button class="back" data-act="pev" data-v="">← All events</button>
-  <div class="card" style="display:grid;gap:6px"><h2 style="color:var(--navy)">${esc(ev.name)}</h2><span class="muted">${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.place)}</span><p>${esc(ev.note)}</p><button class="btn ghost sm" style="justify-self:start" data-act="ics" data-v="${ev.id}">📅 Add to my calendar</button></div>
+  <div class="card" style="display:grid;gap:6px"><h2 style="color:var(--navy)">${esc(ev.name)}</h2><span class="muted">${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.place)}</span><b>${esc(priceText(ev))}</b><p>${esc(ev.note)}</p><button class="btn ghost sm" style="justify-self:start" data-act="ics" data-v="${ev.id}">📅 Add to my calendar</button></div>
   <form class="card" style="display:grid;gap:10px" data-form="signup">
     <label class="f">Parent / guardian name<input type="text" name="parent" required placeholder="Your name"></label>
     <label class="f">Email for your ticket<input type="email" name="email" required placeholder="you@example.com"></label>
     <div class="f" style="display:grid;gap:6px"><span>Students</span>
-      <div class="kid"><input type="text" name="kid1" required placeholder="Student name"><select name="g1" style="width:80px">${['K', '1', '2', '3', '4', '5'].map(g => `<option>${g}</option>`).join('')}</select></div>
-      <div class="kid"><input type="text" name="kid2" placeholder="Another student (optional)"><select name="g2" style="width:80px">${['K', '1', '2', '3', '4', '5'].map(g => `<option>${g}</option>`).join('')}</select></div></div>
+      <div class="kid"><input type="text" name="kid1" required placeholder="Student name"><input type="text" name="t1" placeholder="Teacher" style="width:110px"><select name="g1" style="width:70px">${['K', '1', '2', '3', '4', '5'].map(g => `<option>${g}</option>`).join('')}</select></div>
+      <div class="kid"><input type="text" name="kid2" placeholder="Another student (optional)"><input type="text" name="t2" placeholder="Teacher" style="width:110px"><select name="g2" style="width:70px">${['K', '1', '2', '3', '4', '5'].map(g => `<option>${g}</option>`).join('')}</select></div></div>
     <label class="f">Other adults coming<input type="number" name="adults" min="0" value="0"></label>
     ${ev.extra ? `<label class="f">${esc(ev.extra)}<input type="number" name="pizza" min="0" value="0"></label>` : ''}
     ${ev.questions.map(qField).join('')}
-    ${ev.price || ev.extra ? `<label class="f">How will you pay?<select name="method"><option>Zelle</option><option>Cash</option><option>Check</option><option>Envelope to school</option></select></label><small class="muted">The PTA confirms your payment and your ticket updates automatically.</small>` : ''}
+    ${hasFee(ev) || ev.extra ? `<label class="f">How will you pay?<select name="method"><option>Zelle</option><option>Cash</option><option>Check</option><option>Envelope to school</option></select></label><small class="muted">The PTA confirms your payment and your ticket updates automatically.</small>` : ''}
     <button class="btn" type="submit">Sign up</button></form>
   ${helpOut(ev)}`;
 }
@@ -489,12 +512,12 @@ function ticketCard(f) {
   return `<div class="ticket"><div class="t-top"><b>${esc(ev.name)}</b><br><small>${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.place)}</small></div>
   <div class="t-mid">${qrSvg(f.code)}<code>${esc(f.code)}</code>${PILL[f.status]}</div>
   ${f.cancelled ? '<div class="t-mid" style="padding-top:0">' + PILL.cancelled + '<small class="muted">You cancelled this registration.</small></div>' : ''}
-  <div class="t-bot"><b>${esc(f.parent)}</b><span>${esc(f.members.map(m => m.name.split(' ')[0]).join(', '))} · ${people(f)} people</span>${f.pizza ? `<span>🍕 ${f.pizza} pizza order${f.pizza > 1 ? 's' : ''}</span>` : ''}<span>${money(amount(f))} ${f.method ? '· ' + esc(f.method) : ''}</span></div></div>`;
+  <div class="t-bot"><b>${esc(f.parent)}</b><span>${esc(f.members.map(m => m.name.split(' ')[0]).join(', '))} · ${ak(f)}</span>${f.pizza ? `<span>🍕 ${f.pizza} pizza order${f.pizza > 1 ? 's' : ''}</span>` : ''}<span>${money(amount(f))} ${f.method ? '· ' + esc(f.method) : ''}</span></div></div>`;
 }
 const myFams = () => S.myEmail ? fams.filter(f => f.email.toLowerCase() === S.myEmail) : [];
 function tickets() {
   const mine = myFams();
-  return `<h2 style="color:var(--navy)">My tickets</h2>` + (mine.length ? mine.map(f => ticketCard(f) + (f.cancelled ? '' : `<button class="btn ghost sm" style="justify-self:start" data-act="pcancel" data-v="${f.id}">Can’t make it? Cancel my registration</button>`)).join('') : `<div class="card"><p>${S.myEmail ? 'Your sign-up is in. Your ticket arrives here and in your email after the PTA imports sign-ups from the form.' : 'No tickets yet. Sign up for an event using the PTA’s form; your ticket arrives by email once the PTA imports it.'}</p></div>`);
+  return `<h2 style="color:var(--navy)">My tickets</h2>` + (mine.length ? mine.map(f => ticketCard(f) + (f.cancelled ? '' : (S.editWho === f.id ? `<div class="card" style="display:grid;gap:8px"><h3 style="color:var(--navy)">Who’s coming?</h3><p class="muted">Remove anyone who can’t make it. Your QR ticket stays the same.</p>${f.members.map((m, i) => `<div class="row"><div class="grow"><b>${esc(m.name)}</b><small>${m.grade ? 'Student · Grade ' + esc(m.grade) : 'Adult'}</small></div><button class="btn ghost sm" data-act="premove" data-v="${f.id}" data-i="${i}" ${f.members.length < 2 ? 'disabled' : ''}>Can’t come</button></div>`).join('')}<button class="btn sm" style="justify-self:start" data-act="editwho" data-v="">Done</button></div>` : `<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost sm" data-act="editwho" data-v="${f.id}">Change who’s coming</button><button class="btn ghost sm" data-act="pcancel" data-v="${f.id}">Can’t make it? Cancel my registration</button></div>`))).join('') : `<div class="card"><p>${S.myEmail ? 'Your sign-up is in. Your ticket arrives here and in your email after the PTA imports sign-ups from the form.' : 'No tickets yet. Sign up for an event using the PTA’s form; your ticket arrives by email once the PTA imports it.'}</p></div>`);
 }
 function selfCheck() {
   const mine = myFams();
@@ -530,10 +553,14 @@ document.addEventListener('click', e => {
       const w = { id: 'w' + Date.now(), ev: S.ev, code: ('WALK-' + Math.floor(Math.random() * 9000 + 1000)), parent: name, email: '', members: Array.from({ length: n }, (_, i) => ({ name: i ? name.split(' ').pop() + ' guest ' + i : name, in: true })), status: m ? 'verified' : 'unpaid', method: m, pizza: 0, sent: false, walkin: true, checkins: [nowTime()] };
       fams.push(w); toast(`${name} added and checked in${m ? ' · paid ' + m : ' · not paid'}`); return; }
     case 'csv': { const list = famsOf(S.ev), extraCols = [...new Set(list.flatMap(f => Object.keys(f.other || {})))];
-      const rows = [['Family', 'Email', 'Students', 'People', 'Checked in', 'Payment', 'Method', 'Amount', 'Ticket', ...extraCols]].concat(list.map(f => [f.parent, f.email, f.members.filter(m => m.grade).map(m => m.name).join('; '), people(f), inCount(f), f.status, f.method, amount(f), f.code, ...extraCols.map(c => f.other?.[c] || '')]));
+      const rows = [['Family', 'Email', 'Students', 'Grades', 'Teachers', 'Adults', 'Kids', 'People', 'Checked in', 'Pizza orders', 'Payment', 'Method', 'Amount', 'Ticket', ...extraCols]].concat(list.map(f => [f.parent, f.email, f.members.filter(m => m.grade).map(m => m.name).join('; '), f.members.filter(m => m.grade).map(m => m.grade).join('; '), f.members.filter(m => m.teacher).map(m => m.teacher).join('; '), adultsOf(f), kidsOf(f), people(f), inCount(f), f.pizza || 0, f.status, f.method, amount(f), f.code, ...extraCols.map(c => f.other?.[c] || '')]));
       const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = evOf(S.ev).name.replace(/\s+/g, '-').toLowerCase() + '-registrations.csv'; document.body.append(a); a.click(); a.remove(); toast('CSV downloaded'); return; }
     case 'pv': S.pv = v; S.pev = null; break;
     case 'ics': { const ev = evOf(v), a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([icsFor(ev)], { type: 'text/calendar' })); a.download = ev.id + '-lakeville-pta.ics'; document.body.append(a); a.click(); a.remove(); toast('Added to your calendar'); return; }
+    case 'editwho': S.editWho = v || null; break;
+    case 'premove': { const i = +t.dataset.i, m = f.members[i]; if (!m || f.members.length < 2) return; const before = amount(f); f.members.splice(i, 1); const after = amount(f);
+      (f.removed ||= []).push({ name: m.name, at: nowTime() }); if (f.status === 'verified' && before > after) f.refundDue = (f.refundDue || 0) + (before - after);
+      toast(`Updated: ${f.members.length} attending. The PTA has been notified.`); break; }
     case 'pcancel': { if (S.confirmCancel !== v) { S.confirmCancel = v; toast('Tap again to confirm cancelling'); return; } f.cancelled = nowTime(); S.confirmCancel = null; toast('Registration cancelled. The PTA has been notified.'); return; }
     case 'addslot': { const ev = evOf(S.ev), role = $('#sRole').value.trim(), time = $('#sTime').value.trim(), need = Math.max(1, +$('#sNeed').value || 1); if (!role || !time) { toast('Add the job and the time'); return; } ev.slots.push({ id: 's' + Date.now(), role, time, need, people: [] }); toast('Slot added'); return; }
     case 'volsadd': { const x = evOf(S.ev).slots.find(y => y.id === v), inp = $('#add-' + v), name = inp?.value.trim(); if (!name) { toast('Type the helper’s name'); return; } if (x && !x.people.includes(name)) x.people.push(name); toast(name + ' added'); return; }
@@ -557,7 +584,7 @@ document.addEventListener('click', e => {
     case 'impcancel': S.imp = null; break;
     case 'impgo': { const ev = evOf(S.imp.ev), plan = planImport(ev, S.imp); let n = 0, u = 0;
       plan.forEach(p => {
-        if (p.status === 'new') { n++; fams.push({ id: 'imp' + Date.now() + n, ev: ev.id, code: (ev.id + '-' + Math.floor(Math.random() * 9000 + 1000)).toUpperCase(), parent: p.parent, email: p.email, members: p.members, status: ev.price || p.pizza ? 'pending' : 'verified', method: p.method, pizza: p.pizza, other: p.other, sent: true, walkin: false, checkins: [] }); }
+        if (p.status === 'new') { n++; fams.push({ id: 'imp' + Date.now() + n, ev: ev.id, code: (ev.id + '-' + Math.floor(Math.random() * 9000 + 1000)).toUpperCase(), parent: p.parent, email: p.email, members: p.members, status: hasFee(ev) || p.pizza ? 'pending' : 'verified', method: p.method, pizza: p.pizza, other: p.other, sent: true, walkin: false, checkins: [] }); }
         if (p.status === 'update') { u++; const f = p.existing, was = new Map(f.members.map(m => [m.name, m.in])); f.members = p.members.map(m => ({ ...m, in: !!was.get(m.name) })); if (p.method) f.method = p.method; f.pizza = p.pizza; f.other = p.other; }
       });
       S.lastImport[ev.id] = { n, u, s: plan.filter(p => p.status === 'same').length, k: plan.filter(p => p.status === 'skip').length, at: 'Imported ' + nowTime() };
@@ -573,8 +600,12 @@ document.addEventListener('change', e => {
   else if (t.dataset.act === 'mapcol') S.imp.map[t.dataset.v] = t.value;
   else if (t.dataset.act === 'csvfile') { const file = t.files[0]; if (!file) return; file.text().then(text => { startImport(evOf(S.ev), file.name, text); render(); }); return; }
   else if (t.dataset.act === 'payf') S.pay = t.value;
+  else if (t.dataset.act === 'gradef') S.grade = t.value;
+  else if (t.dataset.act === 'teacherf') S.teacher = t.value;
   else if (t.dataset.act === 'setpay') { f.status = t.value; if (t.value === 'verified') toast('Verified · updated ✅ ticket emailed'); }
   else if (t.dataset.act === 'setmethod' || t.dataset.act === 'quickmethod') f.method = t.value;
+  else if (t.dataset.act === 'pricing') { evOf(S.ev).pricing = t.value; }
+  else if (t.dataset.act === 'price') { evOf(S.ev)[t.dataset.k] = Math.max(0, +t.value || 0); setTimeout(render); return; }
   else if (t.dataset.act === 'refund') { f.refund = t.value; if (t.value) toast('Refund recorded: ' + t.value); }
   else return;
   render();
@@ -587,13 +618,13 @@ document.addEventListener('input', e => {
 document.addEventListener('submit', e => {
   if (e.target.dataset.form !== 'signup') return; e.preventDefault();
   const d = new FormData(e.target), ev = evOf(S.pev), last = String(d.get('parent')).trim().split(' ').pop();
-  const kids = [[d.get('kid1'), d.get('g1')], [d.get('kid2'), d.get('g2')]].filter(([n]) => String(n || '').trim()).map(([n, g]) => ({ name: String(n).trim().includes(' ') ? String(n).trim() : String(n).trim() + ' ' + last, grade: g, in: false }));
+  const kids = [[d.get('kid1'), d.get('g1'), d.get('t1')], [d.get('kid2'), d.get('g2'), d.get('t2')]].filter(([n]) => String(n || '').trim()).map(([n, g, t]) => ({ name: String(n).trim().includes(' ') ? String(n).trim() : String(n).trim() + ' ' + last, grade: g, teacher: String(t || '').trim(), in: false }));
   const adults = [{ name: String(d.get('parent')).trim(), in: false }, ...Array.from({ length: Math.min(9, +d.get('adults') || 0) }, (_, i) => ({ name: i ? 'Guest ' + (i + 1) + ' of ' + last : 'Guest of ' + last, in: false }))];
   const other = {}; ev.questions.forEach(q => { const v = q.type === 'check' ? (d.get('cq_' + q.id) ? 'Yes' : '') : String(d.get('cq_' + q.id) || '').trim(); if (v) other[q.label] = v; });
   const email = String(d.get('email')).trim().toLowerCase();
   const existing = fams.find(f => f.ev === ev.id && f.email.toLowerCase() === email);
   if (existing) { S.myEmail = email; S.pv = 'tickets'; S.pev = null; toast('You’re already signed up. Your ticket is below.'); return; }
-  const f = { id: 'me' + Date.now(), ev: ev.id, code: (ev.id + '-' + Math.floor(Math.random() * 9000 + 1000)).toUpperCase(), parent: adults[0].name, email, members: [...adults, ...kids], status: ev.price || +d.get('pizza') ? 'pending' : 'verified', method: String(d.get('method') || '').replace(/envelope.*/i, 'Envelope'), pizza: +d.get('pizza') || 0, other, sent: true, walkin: false, checkins: [] };
+  const f = { id: 'me' + Date.now(), ev: ev.id, code: (ev.id + '-' + Math.floor(Math.random() * 9000 + 1000)).toUpperCase(), parent: adults[0].name, email, members: [...adults, ...kids], status: hasFee(ev) || +d.get('pizza') ? 'pending' : 'verified', method: String(d.get('method') || '').replace(/envelope.*/i, 'Envelope'), pizza: +d.get('pizza') || 0, other, sent: true, walkin: false, checkins: [] };
   fams.push(f); S.myEmail = email; S.pv = 'tickets'; S.pev = null; S.ev = ev.id;
   toast('You’re signed up! Ticket emailed to ' + email); return;
   render();
