@@ -340,26 +340,6 @@ async function answerFileDelete(request, env, user) {
 
 /* ---------------- Lakeville team chat (owner reads, team writes) ---------------- */
 const TEAM_PAGE = 300, MAX_TOPICS = 40;
-/* ---------- one-time owner cleanup of test data (temporary) ---------- */
-const RESET_TABLES = ['answer_history', 'planning_sections', 'answer_files', 'comment_attachments', 'comment_messages', 'comment_threads', 'team_messages', 'scope_flags'];
-async function adminSummary(env, user) {
-  if (!user.isOwner) return json({ error: 'Not found.' }, 404);
-  const out = {};
-  for (const t of RESET_TABLES) out[t] = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first()).n;
-  out.custom_topics = (await env.DB.prepare("SELECT COUNT(*) AS n FROM team_topics WHERE created_by<>'system'").first()).n;
-  out.people = (await env.DB.prepare('SELECT name, email FROM people').all()).results;
-  return json(out);
-}
-async function adminReset(request, env, user) {
-  if (!user.isOwner) return json({ error: 'Not found.' }, 404);
-  let p; try { p = await readJson(request, 500); } catch { return json({ error: 'Invalid.' }, 400); }
-  if (p.confirm !== 'CLEAR TEST DATA') return json({ error: 'Confirmation text missing.' }, 400);
-  const keys = [...(await env.DB.prepare('SELECT object_key FROM answer_files').all()).results, ...(await env.DB.prepare('SELECT object_key FROM comment_attachments').all()).results].map(r => r.object_key);
-  for (const t of RESET_TABLES) await env.DB.prepare(`DELETE FROM ${t}`).run();
-  await env.DB.prepare("DELETE FROM team_topics WHERE created_by<>'system'").run();
-  let files = 0; for (const k of keys) { try { await env.BUCKET?.delete(k); files++; } catch { /* best effort */ } }
-  return json({ ok: true, filesDeleted: files });
-}
 /* ---------- "beyond Essentials" flags: DBY flags an ask, Lakeville says whether to plan it for a future upgrade ---------- */
 const FLAG_ANSWERS = ['', 'plan', 'skip'];
 async function flagsGet(request, env, user) {
@@ -519,8 +499,6 @@ async function handle(request, env) {
       if (method === 'PATCH') return await teamPatch(request, env, user);
       if (method === 'DELETE') return await teamDelete(request, env, user);
     }
-    if (path === '/api/admin/summary' && method === 'GET') return await adminSummary(env, user);
-    if (path === '/api/admin/reset' && method === 'POST') return await adminReset(request, env, user);
     if (path === '/api/flags') {
       if (method === 'GET') return await flagsGet(request, env, user);
       if (method === 'POST') return await flagsPost(request, env, user);
