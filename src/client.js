@@ -72,7 +72,7 @@ async function api(url, opts = {}) {
 const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 /* ---------- state ---------- */
-const S = { base: {}, pending: {}, saving: {}, failed: {}, conflicts: {}, panelView: 'team', tab: 'start', data: {}, records: {}, files: [], fileBusy: {}, fileError: {}, dirty: {}, loaded: false, busy: false, error: '', notice: '', incoming: [], me: null, nameEditing: false, nameBusy: false, nameError: '', commentsOpen: window.innerWidth > 1100, counts: [] };
+const S = { base: {}, pending: {}, saving: {}, failed: {}, conflicts: {}, panelView: 'team', tab: 'start', data: {}, records: {}, files: [], fileBusy: {}, fileError: {}, dirty: {}, loaded: false, busy: false, error: '', notice: '', incoming: [], me: null, nameEditing: false, nameBusy: false, nameError: '', commentsOpen: window.innerWidth > 850, counts: [] };
 const C = { scope: 'all', threads: [], active: null, messages: [], drafts: {}, uploads: {}, error: '', connected: false, busy: false, uploading: false, showResolved: false, composing: false, newAnchor: null, nextThreads: null, nextMessages: null, me: null, editing: null, editText: '', confirmDelete: null, outgoing: null, scrollAtEnd: true, listKey: '', lastList: '', lastThread: '', gen: 0 };
 const postTopic = () => T.filter === 'All' ? (T.topics.includes('General') ? 'General' : T.topics[0]) : T.filter;
 const F = { flags: [], composing: null, answering: null, busy: false, error: '', last: '', drafts: {} };
