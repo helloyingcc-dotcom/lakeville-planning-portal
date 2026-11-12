@@ -15,6 +15,7 @@ const features=[
 ['events','Unlimited events','Family nights, socials and fundraisers, September to June.','base'],
 ['access','Volunteer access','Multiple volunteer accounts with permissions you control.','base'],
 ['reminders','Automated emails','Confirmations, reminders and event details sent for you.','base'],
+['cancel','Families can cancel','A “Can’t make it?” button on every ticket. The PTA is notified, the list updates, and any Zelle/cash refund is recorded.','base'],
 ['volunteers','Volunteer sign-up slots','List the helpers each event needs (e.g. ticket table 5–6 pm); volunteers sign up, get a reminder and are checked in at the event. Email them anytime.','base'],
 ['groups','Grade & teacher groups','Students are tagged by grade (and teacher) when families sign up, so you can email or report by grade.','base'],
 ['calendar','Events calendar','All upcoming events on one page; families add them to their phone calendar.','base'],
@@ -37,7 +38,7 @@ const AHEAD=[
 ['budget','Would you like to plan a budget for each event?','Set a budget, then see money in vs. money out and what each event raised.'],
 ['reimburse','Should volunteers submit receipts for reimbursement in the app?','Volunteers upload a receipt and the treasurer approves repayment.'],
 ['capacity','Do any events need a spot limit or a waiting list?','For example a dance with limited space, or game sessions that fill up.'],
-['refunds','Do you handle cancellations or refunds?','How often families cancel, and how money is returned today.'],
+['refunds','Would you refund card payments in the app?','Cancelling is already in your plan. This is about sending money back automatically for families who paid by card.'],
 ['tasks','Would you assign prep tasks to PTA members before each event?','For example “order pizza” or “print signs”, with due dates.'],
 ['reuse','Would you start next year’s event from last year’s details?','Copy an event’s settings, questions and volunteer jobs.'],
 ['accounting','Should event money in and out go to your bookkeeping system?','For example QuickBooks or a treasurer’s spreadsheet.']];
@@ -45,7 +46,7 @@ const INTEREST=['Yes, we’d use this','Maybe later','Not needed','Not sure'];
 // What Lakeville gets in School-Year Essentials (shown on the Start page). Keep in step with the Scope sheet.
 const INCLUDED=[
 ['Sign-ups',['Families sign up directly in the app: no more Google Forms. Every event gets its own sign-up page with your own questions (pizza count, T-shirt size…)','Have a list in Excel already (paper sign-ups, last year’s families)? Import it; nobody gets a duplicate ticket','One registration per family: parents, students and guests together']],
-['Digital tickets',['One QR ticket per family, emailed the moment they sign up','Edit and re-send tickets for last-minute changes','An updated ✅ ticket once their payment is confirmed']],
+['Digital tickets',['One QR ticket per family, emailed the moment they sign up','Edit and re-send tickets for last-minute changes','An updated ✅ ticket once their payment is confirmed','Can’t make it? Families cancel right from their ticket; the PTA is notified and the head count updates']],
 ['Payment tracking',['Track Zelle, cash, check and envelope payments','Verified / Pending / Not paid for every family','Automatic reminders to families who haven’t paid']],
 ['Event night check-in',['4 or more volunteers checking in at once, each on their own phone','Scan the QR code or search by parent name, student name or ticket code','Check in part of a family as they arrive, plus walk-ins at the door','Paid / Not paid shown at the door; families can also self check-in with a ✅ screen']],
 ['Volunteers',['Volunteer slots for each event, with reminders the day before','Email your volunteers, add helpers by hand, check them in on the night','Volunteer accounts with permissions you control']],

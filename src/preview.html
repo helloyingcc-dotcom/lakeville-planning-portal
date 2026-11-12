@@ -224,13 +224,14 @@ function planImport(ev, imp) {
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const evOf = id => EVENTS.find(e => e.id === id);
-const famsOf = id => fams.filter(f => f.ev === id);
+const famsOf = id => fams.filter(f => f.ev === id && !f.cancelled);
+const allFamsOf = id => fams.filter(f => f.ev === id);
 const people = f => f.members.length;
 const inCount = f => f.members.filter(m => m.in).length;
 const amount = f => { const ev = evOf(f.ev); const base = ev.unit === 'family' ? ev.price : ev.unit === 'child' ? ev.price * f.members.filter(m => m.grade).length : ev.price * people(f); return base + (f.pizza || 0) * 5; };
 const money = n => '$' + n.toLocaleString();
 const initials = n => n.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-const PILL = { verified: '<span class="pill verified">✓ Verified</span>', pending: '<span class="pill pending">● Pending</span>', unpaid: '<span class="pill unpaid">✕ Not paid</span>' };
+const PILL = { verified: '<span class="pill verified">✓ Verified</span>', pending: '<span class="pill pending">● Pending</span>', unpaid: '<span class="pill unpaid">✕ Not paid</span>', cancelled: '<span class="pill" style="background:#eceef2;color:#5b6170">Cancelled</span>' };
 function toast(t) { S.toast = t; render(); clearTimeout(toast.t); toast.t = setTimeout(() => { S.toast = ''; render(); }, 2200); }
 function nowTime() { return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
 function qrSvg(code) { // sample code pattern (not a scannable QR) seeded from the ticket code
@@ -383,19 +384,20 @@ function filtered(list) {
   return list.filter(f => (S.pay === 'all' || f.status === S.pay) && (!q || f.code.toLowerCase().includes(q) || f.members.some(m => m.name.toLowerCase().includes(q))));
 }
 function regs(ev, list) {
-  const rows = filtered(list);
+  const cancelled = allFamsOf(ev.id).filter(f => f.cancelled);
+  const rows = filtered([...list, ...cancelled]);
   return head('Registrations', `${list.length} families · ${list.reduce((n, f) => n + people(f), 0)} people · ${esc(ev.name)}`, `<button class="btn ghost" data-act="view" data-v="reports">Export</button>`) +
   `<div class="toolbar"><input type="text" id="q" placeholder="Search parent or student name, or ticket code" value="${esc(S.q)}" data-act="q">
     <select data-act="payf" aria-label="Payment filter">${[['all', 'All payments'], ['verified', 'Verified'], ['pending', 'Pending'], ['unpaid', 'Not paid']].map(([v, l]) => `<option value="${v}" ${S.pay === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
   <div class="card" style="padding:4px 8px;overflow:auto"><table><thead><tr><th>Family</th><th>Students</th><th class="hide-sm">Ticket</th><th>Payment</th><th class="hide-sm">Checked in</th></tr></thead><tbody>
-  ${rows.map(f => `<tr class="click" data-act="openfam" data-v="${f.id}"><td><b>${esc(f.parent)}</b>${f.walkin ? ' <span class="pill in">Walk-in</span>' : ''}<br><small class="muted">${people(f)} people</small></td><td>${esc(f.members.filter(m => m.grade).map(m => m.name.split(' ')[0] + ' (' + m.grade + ')').join(', ') || '—')}</td><td class="hide-sm"><code>${esc(f.code)}</code></td><td>${PILL[f.status]}<br><small class="muted">${esc(f.method || '')} ${money(amount(f))}</small></td><td class="hide-sm">${inCount(f)}/${people(f)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No matches.</td></tr>'}
+  ${rows.map(f => `<tr class="click" data-act="openfam" data-v="${f.id}" ${f.cancelled ? 'style="opacity:.6"' : ''}><td><b>${esc(f.parent)}</b>${f.walkin ? ' <span class="pill in">Walk-in</span>' : ''}${f.cancelled ? ' ' + PILL.cancelled : ''}<br><small class="muted">${people(f)} people</small></td><td>${esc(f.members.filter(m => m.grade).map(m => m.name.split(' ')[0] + ' (' + m.grade + ')').join(', ') || '—')}</td><td class="hide-sm"><code>${esc(f.code)}</code></td><td>${PILL[f.status]}<br><small class="muted">${esc(f.method || '')} ${money(amount(f))}</small></td><td class="hide-sm">${inCount(f)}/${people(f)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No matches.</td></tr>'}
   </tbody></table></div>`;
 }
 function drawer() {
   const f = fams.find(x => x.id === S.open), ev = evOf(f.ev);
   return `<div class="drawer-bg" data-act="close"><div class="drawer" role="dialog" aria-label="Family details" data-stop>
     <div class="top" style="margin:0"><div><h1 style="font-size:18px">${esc(f.parent)}</h1><p class="muted">${esc(ev.name)} · <code>${esc(f.code)}</code></p></div><button class="btn ghost sm" data-act="close">Close</button></div>
-    <div class="note">Volunteers on other phones see check-ins instantly, so nobody checks in twice.</div>
+    ${f.cancelled ? `<div class="note" style="background:#f6f6f7">Cancelled by the family ${esc(f.cancelled)}.${f.status === 'verified' && amount(f) ? ` They had paid ${money(amount(f))}. <label style="display:inline-flex;gap:6px;align-items:center">Refund: <select data-act="refund" data-v="${f.id}"><option value="">Not yet</option>${['Zelle', 'Cash', 'Check', 'No refund (donation)'].map(m => `<option ${f.refund === m ? 'selected' : ''}>${m}</option>`).join('')}</select></label>` : ''}</div>` : '<div class="note">Volunteers on other phones see check-ins instantly, so nobody checks in twice.</div>'}
     <div class="list">${f.members.map((m, i) => `<div class="member ${m.in ? 'on' : ''}"><div class="grow"><b>${esc(m.name)}</b><small>${m.grade ? 'Student · Grade ' + esc(m.grade) : 'Adult'}</small></div><button class="btn sm ${m.in ? 'ghost' : ''}" data-act="toggle" data-v="${f.id}" data-i="${i}">${m.in ? 'Undo' : 'Check in'}</button></div>`).join('')}</div>
     <button class="btn" data-act="allin" data-v="${f.id}">Check in whole family</button>
     <div class="card" style="display:grid;gap:10px"><h3>Payment · ${money(amount(f))}</h3>
@@ -486,12 +488,13 @@ function ticketCard(f) {
   const ev = evOf(f.ev);
   return `<div class="ticket"><div class="t-top"><b>${esc(ev.name)}</b><br><small>${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.place)}</small></div>
   <div class="t-mid">${qrSvg(f.code)}<code>${esc(f.code)}</code>${PILL[f.status]}</div>
+  ${f.cancelled ? '<div class="t-mid" style="padding-top:0">' + PILL.cancelled + '<small class="muted">You cancelled this registration.</small></div>' : ''}
   <div class="t-bot"><b>${esc(f.parent)}</b><span>${esc(f.members.map(m => m.name.split(' ')[0]).join(', '))} · ${people(f)} people</span>${f.pizza ? `<span>🍕 ${f.pizza} pizza order${f.pizza > 1 ? 's' : ''}</span>` : ''}<span>${money(amount(f))} ${f.method ? '· ' + esc(f.method) : ''}</span></div></div>`;
 }
 const myFams = () => S.myEmail ? fams.filter(f => f.email.toLowerCase() === S.myEmail) : [];
 function tickets() {
   const mine = myFams();
-  return `<h2 style="color:var(--navy)">My tickets</h2>` + (mine.length ? mine.map(ticketCard).join('') : `<div class="card"><p>${S.myEmail ? 'Your sign-up is in. Your ticket arrives here and in your email after the PTA imports sign-ups from the form.' : 'No tickets yet. Sign up for an event using the PTA’s form; your ticket arrives by email once the PTA imports it.'}</p></div>`);
+  return `<h2 style="color:var(--navy)">My tickets</h2>` + (mine.length ? mine.map(f => ticketCard(f) + (f.cancelled ? '' : `<button class="btn ghost sm" style="justify-self:start" data-act="pcancel" data-v="${f.id}">Can’t make it? Cancel my registration</button>`)).join('') : `<div class="card"><p>${S.myEmail ? 'Your sign-up is in. Your ticket arrives here and in your email after the PTA imports sign-ups from the form.' : 'No tickets yet. Sign up for an event using the PTA’s form; your ticket arrives by email once the PTA imports it.'}</p></div>`);
 }
 function selfCheck() {
   const mine = myFams();
@@ -531,6 +534,7 @@ document.addEventListener('click', e => {
       const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = evOf(S.ev).name.replace(/\s+/g, '-').toLowerCase() + '-registrations.csv'; document.body.append(a); a.click(); a.remove(); toast('CSV downloaded'); return; }
     case 'pv': S.pv = v; S.pev = null; break;
     case 'ics': { const ev = evOf(v), a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([icsFor(ev)], { type: 'text/calendar' })); a.download = ev.id + '-lakeville-pta.ics'; document.body.append(a); a.click(); a.remove(); toast('Added to your calendar'); return; }
+    case 'pcancel': { if (S.confirmCancel !== v) { S.confirmCancel = v; toast('Tap again to confirm cancelling'); return; } f.cancelled = nowTime(); S.confirmCancel = null; toast('Registration cancelled. The PTA has been notified.'); return; }
     case 'addslot': { const ev = evOf(S.ev), role = $('#sRole').value.trim(), time = $('#sTime').value.trim(), need = Math.max(1, +$('#sNeed').value || 1); if (!role || !time) { toast('Add the job and the time'); return; } ev.slots.push({ id: 's' + Date.now(), role, time, need, people: [] }); toast('Slot added'); return; }
     case 'volsadd': { const x = evOf(S.ev).slots.find(y => y.id === v), inp = $('#add-' + v), name = inp?.value.trim(); if (!name) { toast('Type the helper’s name'); return; } if (x && !x.people.includes(name)) x.people.push(name); toast(name + ' added'); return; }
     case 'volin': { const x = evOf(S.ev).slots.find(y => y.id === v), n = t.dataset.n; x.here ||= []; x.here = x.here.includes(n) ? x.here.filter(y => y !== n) : [...x.here, n]; break; }
@@ -571,6 +575,7 @@ document.addEventListener('change', e => {
   else if (t.dataset.act === 'payf') S.pay = t.value;
   else if (t.dataset.act === 'setpay') { f.status = t.value; if (t.value === 'verified') toast('Verified · updated ✅ ticket emailed'); }
   else if (t.dataset.act === 'setmethod' || t.dataset.act === 'quickmethod') f.method = t.value;
+  else if (t.dataset.act === 'refund') { f.refund = t.value; if (t.value) toast('Refund recorded: ' + t.value); }
   else return;
   render();
 });

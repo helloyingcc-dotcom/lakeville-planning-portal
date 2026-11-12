@@ -136,7 +136,7 @@ with sync_playwright() as p:
     y.click('.panel-tab:has-text("Questions for DBY")')
     # tiers
     y.click('nav button[aria-label="Feature priorities"]')
-    check(y.locator('.feature').count() == 14 and y.locator('.tier-badge.pro').count() == 0, 'feature page shows only the 14 included features')
+    check(y.locator('.feature').count() == 15 and y.locator('.tier-badge.pro').count() == 0, 'feature page shows only the 15 included features')
     check('$249' in y.locator('.tier-price.base').inner_text(), 'plan price shown')
     check(y.locator('nav button[aria-label="Pro tier planning"]').count() == 1, 'owner sees Pro planning tab')
     check(j.locator('nav button[aria-label="Pro tier planning"]').count() == 0 and j.locator('nav button[aria-label="App preview"]').count() == 0, 'Jessie sees neither App preview nor Pro planning')
