@@ -481,6 +481,23 @@ async function presenceGet(env, user) {
   return json({ people: r.results.filter(x => !owners.includes(x.email)).map(x => ({ name: x.name || nameFromEmail(x.email), email: x.email, firstSeen: x.first_seen, lastSeen: x.last_seen, visits: x.visits, online: Date.parse(x.last_seen) > cutoff })) });
 }
 
+// TEMPORARY: put each writer's name at the start of answers saved before in-box labels existed. Owner only; run once, then remove.
+async function labelAnswers(env, user) {
+  if (!user.isOwner) return json({ error: 'Not found.' }, 404);
+  const rows = (await env.DB.prepare('SELECT * FROM planning_sections').all()).results, done = [];
+  for (const row of rows) {
+    if (ownerOnly(row.id)) continue;
+    const content = JSON.parse(row.content), by = answeredBy(row.field_by); let changed = false;
+    for (const [key, val] of Object.entries(content)) {
+      const f = MODEL.sections[row.id]?.find(x => x.key === key);
+      if (!f || f.options || /Name$|^completedBy$/.test(key) || typeof val !== 'string' || !val.trim() || /^[^\n:]{1,40}: /.test(val) || !by[key]?.n) continue;
+      content[key] = by[key].n + ': ' + val; changed = true; done.push(row.id + ':' + key);
+    }
+    if (changed) await env.DB.prepare('UPDATE planning_sections SET content=?, revision=revision+1 WHERE id=? AND revision=?').bind(JSON.stringify(content), row.id, row.revision).run();
+  }
+  return json({ labelled: done.length, fields: done });
+}
+
 /* ---------------- router ---------------- */
 async function handle(request, env) {
   const url = new URL(request.url), path = url.pathname, method = request.method;
@@ -503,6 +520,7 @@ async function handle(request, env) {
     if (path === '/' && method === 'GET') return page(HTML);
     if (path === '/app-preview.html' && method === 'GET') return user.isOwner ? page(PREVIEW_HTML) : json({ error: 'Not found.' }, 404);
     if (path === '/api/presence' && method === 'GET') return await presenceGet(env, user);
+    if (path === '/api/admin/label-answers' && method === 'POST') return await labelAnswers(env, user); // TEMPORARY one-time backfill
     if (path === '/api/me') {
       if (method === 'GET') return json({ email: user.email, name: user.displayName, named: user.named, isOwner: user.isOwner, attachments: !!env.BUCKET, version: VERSION });
       if (method === 'PUT') return mePut(request, env, user);

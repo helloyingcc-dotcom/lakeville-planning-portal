@@ -11,6 +11,7 @@ with sync_playwright() as p:
     br = p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--no-sandbox'])
     def ctx(who, w=1440):
         c = br.new_context(viewport={'width': w, 'height': 1000}, extra_http_headers={'Cf-Access-Jwt-Assertion': T[who]})
+        c.add_init_script('window.__noAutoLabel = true')  # in-box name labels are tested separately (test/label-test.py)
         pg = c.new_page()
         pg.on('pageerror', lambda e: errors.append(f'{who}: {e}'))
         pg.on('console', lambda m: m.type == 'error' and errors.append(f'{who} console: {m.text}'))

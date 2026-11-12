@@ -130,11 +130,12 @@ function renderByLines() { for (const el of document.querySelectorAll('[data-by]
 // "Jessie Y: …" then a new line "Jimmy: " ready for their addition. Nothing is added if they leave without typing.
 const LBL = {};
 function labelOnFocus(tab, key, el) {
-  if (ownerOnly(tab) || !S.me) return;
+  if (ownerOnly(tab) || !S.me || window.__noAutoLabel || /Name$|^completedBy$/.test(key)) return;   // names/titles stay clean
   const text = el.value, me = S.me.name, last = S.records[tab]?.answeredBy?.[key]?.n;
-  if (!text.trim() || !last || last === me) return;
-  const labelled = /^[^\n:]{1,40}: /.test(text) ? text : last + ': ' + text;
-  const added = labelled.replace(/\s+$/, '') + '\n\n' + me + ': ';
+  let added;
+  if (!text.trim()) added = me + ': ';                       // new answer: start with the writer's name
+  else if (!last || last === me) return;                     // continuing my own part
+  else added = (/^[^\n:]{1,40}: /.test(text) ? text : last + ': ' + text).replace(/\s+$/, '') + '\n\n' + me + ': ';
   LBL[key] = { before: text, added };
   el.value = added; el.setSelectionRange(added.length, added.length);
 }
