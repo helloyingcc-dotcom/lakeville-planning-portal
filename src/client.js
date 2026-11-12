@@ -126,7 +126,7 @@ function field(f) {
   const control = dyn
     ? h('select', { id, 'aria-label': f.label, disabled, onchange: e => change(f.key, e.target.value) }, h('option', { value: '' }, dyn.length ? 'Choose an event' : 'Add events on the Current events page first'), dyn.map(o => h('option', { value: o }, o)))
     : f.options
-    ? h('select', { id, 'aria-label': f.label, disabled, onchange: e => change(f.key, e.target.value) }, h('option', { value: '' }, 'Choose when ready'), f.options.map(o => h('option', { value: o }, o)))
+    ? h('select', { id, 'aria-label': f.label, disabled, onchange: e => change(f.key, e.target.value) }, h('option', { value: '' }, 'Choose one'), f.options.map(o => h('option', { value: o }, o)))
     : h('textarea', { id, 'aria-label': f.label, rows: (f.key.includes('Name') || f.key === 'completedBy') ? 2 : 3, maxlength: 6000, disabled, placeholder: 'Your answer', oninput: e => change(f.key, e.target.value) });
   control.value = current()[f.key] || '';
   return h('div', { class: 'field' },
@@ -192,7 +192,7 @@ async function removeAnswerFile(tab, key, file) {
   finally { S.fileBusy[k] = false; renderFileArea(tab, key); }
 }
 const fields = list => h('div', { class: 'fields' }, list.map(field));
-const SHORT = ['Event name', 'Who runs it?', 'How do you run it today?', 'What is the hardest part?', 'What would make it easier?', 'When should we look at it?'];
+const SHORT = ['Event name', 'Who runs it?', 'How do you run it today?', 'What is the hardest part?', 'What would make it easier?', 'Which event should we set up in the app first?'];
 const eventFilled = i => sections.events.slice(i * EVENT_FIELDS, (i + 1) * EVENT_FIELDS).some(f => (S.data.events?.[f.key] || '').trim());
 const eventNames = () => Array.from({ length: MAX_EVENTS }, (_, i) => (S.data.events?.['event' + i + 'Name'] || '').trim()).filter(Boolean);
 function visibleEventCount() {
