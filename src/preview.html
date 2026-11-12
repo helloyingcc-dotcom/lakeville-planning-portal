@@ -129,10 +129,10 @@ const LION = '__LION_DATA__';
 /* ---------------- sample data (fictional) ---------------- */
 const QTYPES = { text: 'Short answer', number: 'Number', select: 'Dropdown', check: 'Checkbox' };
 const EVENTS = [
-  { id: 'gn', name: 'Family Game Night', date: 'Fri, Feb 5', time: '5:00–8:00 PM', place: 'Gym & classrooms', price: 10, unit: 'family', note: 'Two sessions; pick your top 3 games when you arrive.', questions: [{ id: 'q1', label: 'Family T-shirt size (optional)', type: 'select', options: ['Youth S', 'Youth M', 'Adult M', 'Adult L'], required: false }] },
-  { id: 'sd', name: 'Sweetheart Dance', date: 'Fri, Feb 12', time: '6:00–8:00 PM', place: 'Cafeteria', price: 8, unit: 'child', note: 'Wristbands at the door for paid tickets.', questions: [] },
-  { id: 'ln', name: 'Literacy Night', date: 'Thu, Mar 4', time: '6:00–7:30 PM', place: 'Library', price: 0, unit: 'family', note: 'Free event. Optional pizza pre-order ($5 for 2 slices).', extra: 'Pizza orders (2 slices, $5 each)', questions: [] },
-  { id: 'cs', name: 'Car Show', date: 'Sat, May 15', time: '10:00 AM–2:00 PM', place: 'Front lot · 3 entrances', price: 5, unit: 'person', note: 'Pay at any of the three entrances.', questions: [{ id: 'q2', label: 'Bringing a car to show?', type: 'check', required: false }] }
+  { id: 'gn', name: 'Family Game Night', date: 'Fri, Feb 5', time: '5:00–8:00 PM', place: 'Gym & classrooms', price: 10, unit: 'family', note: 'Two sessions; pick your top 3 games when you arrive.', ics: ['20270205T170000', '20270205T200000'], slots: [{ id: 's1', role: 'Ticket table', time: '4:30–6:00 PM', need: 2, people: ['Grace Haddad'] }, { id: 's2', role: 'Game hosts', time: '5:00–8:00 PM', need: 6, people: ['Daniel Lee', 'Amy Chen', 'Raj Patel'] }, { id: 's3', role: 'Clean-up crew', time: '8:00–8:30 PM', need: 3, people: [] }], questions: [{ id: 'q1', label: 'Family T-shirt size (optional)', type: 'select', options: ['Youth S', 'Youth M', 'Adult M', 'Adult L'], required: false }] },
+  { id: 'sd', name: 'Sweetheart Dance', date: 'Fri, Feb 12', time: '6:00–8:00 PM', place: 'Cafeteria', price: 8, unit: 'child', note: 'Wristbands at the door for paid tickets.', ics: ['20270212T180000', '20270212T200000'], slots: [{ id: 's4', role: 'Door & wristbands', time: '5:45–7:00 PM', need: 2, people: [] }], questions: [] },
+  { id: 'ln', name: 'Literacy Night', date: 'Thu, Mar 4', time: '6:00–7:30 PM', place: 'Library', price: 0, unit: 'family', note: 'Free event. Optional pizza pre-order ($5 for 2 slices).', extra: 'Pizza orders (2 slices, $5 each)', ics: ['20270304T180000', '20270304T193000'], slots: [{ id: 's5', role: 'Pizza table', time: '5:45–7:00 PM', need: 2, people: ['Maria Garcia'] }], questions: [] },
+  { id: 'cs', name: 'Car Show', date: 'Sat, May 15', time: '10:00 AM–2:00 PM', place: 'Front lot · 3 entrances', price: 5, unit: 'person', note: 'Pay at any of the three entrances.', ics: ['20270515T100000', '20270515T140000'], slots: [{ id: 's6', role: 'Entrance gates (2 per gate)', time: '9:30 AM–2:00 PM', need: 6, people: ['Sean Murphy', 'Yuki Tanaka'] }], questions: [{ id: 'q2', label: 'Bringing a car to show?', type: 'check', required: false }] }
 ];
 const LAST = ['Lee','Chen','Wong','Smith','Kim','Patel','Garcia','Nguyen','Brown','Rossi','Cohen','Okafor','Silva','Murphy','Tanaka','Haddad','Novak','Ali','Park','Lopez','Fischer','Rivera'];
 const FIRST = ['Ava','Leo','Mia','Noah','Zoe','Eli','Ivy','Max','Lily','Sam','Ruby','Owen','Nora','Jack','Ella','Theo','Maya','Finn','Aria','Kai','June','Luca','Rosa','Ezra'];
@@ -153,7 +153,8 @@ EVENTS.forEach(ev => {
 });
 // a few already checked in so the dashboard has life
 fams.filter(f => f.ev === 'gn').slice(0, 6).forEach((f, i) => { f.members.forEach(m => m.in = true); f.checkins.push(`6:${String(12 - i).padStart(2, '0')} PM`); });
-const S = { imp: null, maps: {}, lastImport: {}, myEmail: '', mode: innerWidth < 600 ? 'parent' : 'admin', view: 'dash', ev: 'gn', q: '', pay: 'all', open: null, desk: '', pv: 'events', pev: null, myTickets: [], showTicket: null, toast: '' };
+const SENT = {};
+const S = { helper: '', imp: null, maps: {}, lastImport: {}, myEmail: '', mode: innerWidth < 600 ? 'parent' : 'admin', view: 'dash', ev: 'gn', q: '', pay: 'all', open: null, desk: '', pv: 'events', pev: null, myTickets: [], showTicket: null, toast: '' };
 /* ---------------- Google Form responses (simulated) ----------------
    Essentials: each event's sign-up is a Google Form run by the PTA. A volunteer downloads the
    responses as CSV and imports them; the app matches columns once and never makes duplicates. */
@@ -241,10 +242,10 @@ function qrSvg(code) { // sample code pattern (not a scannable QR) seeded from t
   return `<svg class="qr" viewBox="0 0 ${n} ${n}" role="img" aria-label="Sample ticket code ${esc(code)}">${cells.map(([x, y]) => `<rect x="${x}" y="${y}" width="1" height="1"/>`).join('')}</svg>`;
 }
 /* ---------------- PTA admin ---------------- */
-const NAV = [['dash', '▦', 'Dashboard'], ['form', '✎', 'Sign-up form'], ['import', '⤓', 'Import (Google Forms)'], ['regs', '👥', 'Registrations'], ['desk', '✓', 'Check-in desk'], ['pay', '$', 'Payments'], ['review', '☑', 'Pre-event review'], ['reports', '↓', 'Reports & export'], ['emails', '✉', 'Automated emails']];
+const NAV = [['dash', '▦', 'Dashboard'], ['form', '✎', 'Sign-up form'], ['vols', '🙋', 'Volunteers'], ['mail', '✉', 'Email families'], ['import', '⤓', 'Import (Google Forms)'], ['regs', '👥', 'Registrations'], ['desk', '✓', 'Check-in desk'], ['pay', '$', 'Payments'], ['review', '☑', 'Pre-event review'], ['reports', '↓', 'Reports & export'], ['emails', '⚙', 'Automated emails']];
 function admin() {
   const ev = evOf(S.ev), list = famsOf(S.ev);
-  const body = { dash, formView, importView, regs, desk, pay, review, reports, emails }[S.view === 'import' ? 'importView' : S.view === 'form' ? 'formView' : S.view](ev, list);
+  const body = { dash, formView, volsView, mailView, importView, regs, desk, pay, review, reports, emails }[{ import: 'importView', form: 'formView', vols: 'volsView', mail: 'mailView' }[S.view] || S.view](ev, list);
   return `<div class="admin"><aside class="side">
     <div class="brand"><img src="${LION}" alt=""><div>Lakeville PTA<small>Events</small></div></div>
     ${NAV.map(([id, ic, label]) => `<button data-act="view" data-v="${id}" ${S.view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${ic}</span>${label}</button>`).join('')}
@@ -320,6 +321,44 @@ function formView(ev) {
     <button class="btn" data-act="addq">Add question</button>
     <div class="note">Switch to <b>Parent</b> to see it on the sign-up page right away.</div>
   </div></div>`;
+}
+function volsView(ev) {
+  const filled = ev.slots.reduce((n, x) => n + Math.min(x.need, x.people.length), 0), need = ev.slots.reduce((n, x) => n + x.need, 0);
+  return head('Volunteers', `${esc(ev.name)} · ${filled} of ${need} spots filled`, '') +
+  `<div class="grid2"><div class="card" style="display:grid;gap:4px;align-content:start"><h3>Volunteer slots</h3>
+    ${ev.slots.length ? ev.slots.map(x => `<div class="row"><div class="grow"><b>${esc(x.role)}</b><small>${esc(x.time)} · ${x.people.length}/${x.need} signed up${x.people.length ? ': ' + esc(x.people.join(', ')) : ''}</small>
+      <div style="height:6px;background:var(--soft);border-radius:4px;margin-top:6px"><div style="height:6px;border-radius:4px;background:${x.people.length >= x.need ? 'var(--green)' : 'var(--gold)'};width:${Math.min(100, Math.round(x.people.length / x.need * 100))}%"></div></div></div>
+      <button class="btn ghost sm" data-act="delslot" data-v="${x.id}">Remove</button></div>`).join('') : '<p class="muted">No volunteer slots yet.</p>'}
+  </div>
+  <div class="card" style="display:grid;gap:10px;align-content:start"><h3>Add a slot</h3>
+    <label class="f">Job<input type="text" id="sRole" placeholder="e.g. Bake sale table"></label>
+    <label class="f">Time<input type="text" id="sTime" placeholder="e.g. 6:00–7:00 PM"></label>
+    <label class="f">How many people<input type="number" id="sNeed" min="1" value="2"></label>
+    <button class="btn" data-act="addslot">Add slot</button>
+    <div class="note">Helpers sign up from the event page (Parent view) and get a reminder email the day before.</div></div></div>`;
+}
+function mailView(ev, list) {
+  const groups = { all: ['Everyone registered', list], unpaid: ['Not paid yet', list.filter(f => f.status !== 'verified')], vols: ['Volunteers for this event', ev.slots.flatMap(x => x.people)] };
+  const log = SENT[ev.id] || [];
+  return head('Email families', `${esc(ev.name)} · quick updates to people signed up`, '') +
+  `<div class="grid2"><div class="card" style="display:grid;gap:10px;align-content:start">
+    <label class="f">Send to<select id="mTo">${Object.entries(groups).map(([k, [l, arr]]) => `<option value="${k}">${l} (${arr.length})</option>`).join('')}</select></label>
+    <label class="f">Subject<input type="text" id="mSubj" value="${esc(ev.name)}: parking update"></label>
+    <label class="f">Message<textarea id="mBody" rows="5">Please park in the back lot and use the gym doors. See you there!</textarea></label>
+    <button class="btn" data-act="sendmail">Send email</button>
+    <div class="note">Sent from “Lakeville PTA”; replies go to the PTA’s Gmail.</div></div>
+  <div class="card" style="display:grid;gap:6px;align-content:start"><h3>Sent for this event</h3>${log.length ? log.map(m => `<div class="row"><div class="grow"><b>${esc(m.subj)}</b><small>${esc(m.to)} · ${m.n} people · ${esc(m.at)}</small></div></div>`).join('') : '<p class="muted">Nothing sent yet.</p>'}</div></div>`;
+}
+function icsFor(ev) {
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//DBY//Lakeville PTA Events//EN', 'BEGIN:VEVENT', 'UID:' + ev.id + '@lakeville-pta', 'DTSTAMP:20261111T120000', 'DTSTART:' + ev.ics[0], 'DTEND:' + ev.ics[1], 'SUMMARY:' + ev.name.replace(/[,;]/g, ' '), 'LOCATION:Lakeville Elementary - ' + ev.place.replace(/[,;]/g, ' '), 'DESCRIPTION:' + ev.note.replace(/[,;]/g, ' '), 'END:VEVENT', 'END:VCALENDAR'];
+  return lines.join('\r\n');
+}
+function helpOut(ev) {
+  if (!ev.slots.length) return '';
+  return `<div class="card" style="display:grid;gap:8px"><h3 style="color:var(--navy)">Help out</h3><p class="muted">Volunteer for a slot. You’ll get a reminder the day before.</p>
+    <label class="f">Your name<input type="text" id="helperName" value="${esc(S.helper)}" placeholder="Your name" data-act="helper"></label>
+    ${ev.slots.map(x => { const mine = S.helper && x.people.includes(S.helper), full = x.people.length >= x.need; return `<div class="row"><div class="grow"><b>${esc(x.role)}</b><small>${esc(x.time)} · ${Math.max(0, x.need - x.people.length)} spot${x.need - x.people.length === 1 ? '' : 's'} left</small></div>${mine ? '<span class="pill verified">You’re in ✓</span>' : `<button class="btn sm" data-act="volup" data-v="${x.id}" ${full ? 'disabled' : ''}>${full ? 'Full' : 'Sign up'}</button>`}</div>`; }).join('')}
+  </div>`;
 }
 function qField(q) {
   const n = 'cq_' + q.id, req = q.required ? 'required' : '';
@@ -413,7 +452,7 @@ function emails(ev) {
 /* ---------------- parent phone ---------------- */
 function parent() {
   let body = '';
-  if (S.pv === 'events' && !S.pev) body = `<h2 style="color:var(--navy)">Upcoming events</h2>` + EVENTS.map(e => `<div class="card evcard" data-act="pev" data-v="${e.id}"><h3>${esc(e.name)}</h3><span class="muted">${esc(e.date)} · ${esc(e.time)}</span><span>${e.price ? money(e.price) + ' per ' + e.unit : 'Free'}</span></div>`).join('');
+  if (S.pv === 'events' && !S.pev) body = `<h2 style="color:var(--navy)">Upcoming events</h2><p class="muted" style="margin:0">The PTA’s calendar for the school year.</p>` + EVENTS.map(e => `<div class="card evcard" data-act="pev" data-v="${e.id}"><h3>${esc(e.name)}</h3><span class="muted">${esc(e.date)} · ${esc(e.time)}</span><span>${e.price ? money(e.price) + ' per ' + e.unit : 'Free'}${e.slots.some(x => x.people.length < x.need) ? ' · <span class="pill pending">Volunteers needed</span>' : ''}</span><button class="btn ghost sm" style="justify-self:start" data-act="ics" data-v="${e.id}">📅 Add to my calendar</button></div>`).join('');
   else if (S.pv === 'events' && S.pev) body = signup(evOf(S.pev));
   else if (S.pv === 'sent') body = `<div class="card" style="display:grid;gap:10px;text-align:center;justify-items:center"><div class="ok-screen" style="width:100%"><div class="big">✓</div><h2>Form submitted</h2><p>Thanks! Your QR ticket will be emailed to ${esc(S.myEmail)} once the PTA imports this week’s sign-ups.</p></div><div class="note" style="text-align:left">Prototype: switch to <b>PTA team → Import sign-ups</b> to import it, then come back to <b>My tickets</b>.</div></div>`;
   else if (S.pv === 'tickets') body = tickets();
@@ -423,7 +462,7 @@ function parent() {
 }
 function signup(ev) {
   return `<button class="back" data-act="pev" data-v="">← All events</button>
-  <div class="card" style="display:grid;gap:6px"><h2 style="color:var(--navy)">${esc(ev.name)}</h2><span class="muted">${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.place)}</span><p>${esc(ev.note)}</p></div>
+  <div class="card" style="display:grid;gap:6px"><h2 style="color:var(--navy)">${esc(ev.name)}</h2><span class="muted">${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.place)}</span><p>${esc(ev.note)}</p><button class="btn ghost sm" style="justify-self:start" data-act="ics" data-v="${ev.id}">📅 Add to my calendar</button></div>
   <form class="card" style="display:grid;gap:10px" data-form="signup">
     <label class="f">Parent / guardian name<input type="text" name="parent" required placeholder="Your name"></label>
     <label class="f">Email for your ticket<input type="email" name="email" required placeholder="you@example.com"></label>
@@ -434,7 +473,8 @@ function signup(ev) {
     ${ev.extra ? `<label class="f">${esc(ev.extra)}<input type="number" name="pizza" min="0" value="0"></label>` : ''}
     ${ev.questions.map(qField).join('')}
     ${ev.price || ev.extra ? `<label class="f">How will you pay?<select name="method"><option>Zelle</option><option>Cash</option><option>Check</option><option>Envelope to school</option></select></label><small class="muted">The PTA confirms your payment and your ticket updates automatically.</small>` : ''}
-    <button class="btn" type="submit">Sign up</button></form>`;
+    <button class="btn" type="submit">Sign up</button></form>
+  ${helpOut(ev)}`;
 }
 function ticketCard(f) {
   const ev = evOf(f.ev);
@@ -484,6 +524,14 @@ document.addEventListener('click', e => {
       const rows = [['Family', 'Email', 'Students', 'People', 'Checked in', 'Payment', 'Method', 'Amount', 'Ticket', ...extraCols]].concat(list.map(f => [f.parent, f.email, f.members.filter(m => m.grade).map(m => m.name).join('; '), people(f), inCount(f), f.status, f.method, amount(f), f.code, ...extraCols.map(c => f.other?.[c] || '')]));
       const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = evOf(S.ev).name.replace(/\s+/g, '-').toLowerCase() + '-registrations.csv'; document.body.append(a); a.click(); a.remove(); toast('CSV downloaded'); return; }
     case 'pv': S.pv = v; S.pev = null; break;
+    case 'ics': { const ev = evOf(v), a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([icsFor(ev)], { type: 'text/calendar' })); a.download = ev.id + '-lakeville-pta.ics'; document.body.append(a); a.click(); a.remove(); toast('Added to your calendar'); return; }
+    case 'addslot': { const ev = evOf(S.ev), role = $('#sRole').value.trim(), time = $('#sTime').value.trim(), need = Math.max(1, +$('#sNeed').value || 1); if (!role || !time) { toast('Add the job and the time'); return; } ev.slots.push({ id: 's' + Date.now(), role, time, need, people: [] }); toast('Slot added'); return; }
+    case 'delslot': { const ev = evOf(S.ev); ev.slots = ev.slots.filter(x => x.id !== v); break; }
+    case 'volup': { const name = S.helper.trim(); if (!name) { toast('Type your name first'); $('#helperName')?.focus(); return; } const x = evOf(S.pev).slots.find(y => y.id === v); if (x && !x.people.includes(name) && x.people.length < x.need) x.people.push(name); toast('Thanks! You’re signed up to help.'); return; }
+    case 'sendmail': { const ev = evOf(S.ev), list = famsOf(S.ev), k = $('#mTo').value, subj = $('#mSubj').value.trim(), body = $('#mBody').value.trim();
+      if (!subj || !body) { toast('Add a subject and a message'); return; }
+      const n = k === 'all' ? list.length : k === 'unpaid' ? list.filter(f => f.status !== 'verified').length : ev.slots.flatMap(x => x.people).length;
+      (SENT[ev.id] ||= []).unshift({ subj, to: { all: 'Everyone registered', unpaid: 'Not paid yet', vols: 'Volunteers' }[k], n, at: nowTime() }); toast(`Email sent to ${n} ${n === 1 ? 'person' : 'people'}`); return; }
     case 'addq': { const ev = evOf(S.ev), label = $('#qLabel').value.trim(), type = $('#qType').value, opts = $('#qOpts').value.split(',').map(x => x.trim()).filter(Boolean);
       if (!label) { toast('Type the question first'); return; }
       if (type === 'select' && opts.length < 2) { toast('Add at least two choices for a dropdown'); return; }
@@ -520,6 +568,7 @@ document.addEventListener('change', e => {
 document.addEventListener('input', e => {
   if (e.target.dataset.act === 'q') { S.q = e.target.value; render(); }
   if (e.target.dataset.act === 'desk') { S.desk = e.target.value; render(); }
+  if (e.target.dataset.act === 'helper') { S.helper = e.target.value; }
 });
 document.addEventListener('submit', e => {
   if (e.target.dataset.form !== 'signup') return; e.preventDefault();
