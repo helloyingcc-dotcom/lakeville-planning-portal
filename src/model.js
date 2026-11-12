@@ -31,6 +31,7 @@ const features=[
 ['refunds','Cancellations & refunds','Handle cancellation requests and refund follow-up.','pro'],
 ['tasks','PTA task assignments','Assign and track preparation tasks before each event.','pro'],
 ['selfcheckin','Family self check-in','A door QR sign for each event: families scan it with their phone when they arrive and check themselves in, so fewer volunteers are needed at the door.','pro'],
+['runofshow','Run of show','A minute-by-minute schedule for event night: who does what and when (doors open, raffle, announcements, cleanup), shared with volunteers on their phones.','pro'],
 ['reuse','Copy a past event','Start a new event from last year’s details.','pro'],
 ['accounting','Accounting connection','Send event money in and out to your bookkeeping system.','pro']];
 // "Looking ahead": Lakeville-facing questions about possible future upgrades (the Pro list, minus anything offered in Essentials).
@@ -43,6 +44,7 @@ const AHEAD=[
 ['capacity','Do any events need a spot limit or a waiting list?','For example a dance with limited space, or game sessions that fill up.'],
 ['refunds','Would you refund card payments in the app?','Cancelling is already in your plan. This is about sending money back automatically for families who paid by card.'],
 ['selfcheckin','Would families check themselves in at the door with their phone?','A QR sign by the entrance on event day: families scan it and check in on their own, so fewer volunteers are needed at the check-in table. Volunteer check-in is already in your plan.'],
+['runofshow','Would a run of show help on event night?','A minute-by-minute schedule of who does what and when (doors open 5:30, raffle 6:15, announcements, cleanup), that volunteers can see on their phones.'],
 ['tasks','Would you assign prep tasks to PTA members before each event?','For example “order pizza” or “print signs”, with due dates.'],
 ['reuse','Would you start next year’s event from last year’s details?','Copy an event’s settings, questions and volunteer jobs.'],
 ['accounting','Should event money in and out go to your bookkeeping system?','For example QuickBooks or a treasurer’s spreadsheet.']];

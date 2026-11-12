@@ -142,7 +142,7 @@ with sync_playwright() as p:
     check(j.locator('nav button[aria-label="Pro tier planning"]').count() == 0 and j.locator('nav button[aria-label="App preview"]').count() == 0, 'Jessie sees neither App preview nor Pro planning')
     check(y.locator('nav button').nth(6).inner_text().endswith('App preview'), 'App preview is 7th for owner')
     y.click('nav button[aria-label="Pro tier planning"]')
-    check(y.locator('.feature').count() == 10 and y.locator('[data-anchor]').count() == 0 and y.locator('.team-anchor').count() == 0 and y.locator('#introComment').count() == 0, 'Pro page: 10 features, no shared comment buttons')
+    check(y.locator('.feature').count() == 11 and y.locator('[data-anchor]').count() == 0 and y.locator('.team-anchor').count() == 0 and y.locator('#introComment').count() == 0, 'Pro page: 11 features, no shared comment buttons')
     y.select_option('#answer-pro-vendorsSignal', 'Strong signal'); y.fill('#answer-pro-vendorsEvidence', 'Asked how to track receipts'); expect(y.locator('#saveState')).to_have_text('All changes saved ✓', timeout=8000)
     check(True, 'owner saves Pro notes')
     y.screenshot(path='/tmp/shot-pro.png')
