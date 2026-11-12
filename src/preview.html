@@ -147,12 +147,77 @@ EVENTS.forEach(ev => {
     const adults = [{ name: PARENT[(i + ev.id.charCodeAt(1)) % PARENT.length] + ' ' + last, in: false }];
     if (rnd() > .55) adults.push({ name: 'Guest of ' + last, in: false });
     const r = rnd(), status = ev.price === 0 && !ev.extra ? 'verified' : r < .7 ? 'verified' : r < .88 ? 'pending' : 'unpaid';
-    fams.push({ id: ev.id + i, ev: ev.id, code: (ev.id + '-' + (1000 + i * 37)).toUpperCase(), parent: adults[0].name, email: adults[0].name.split(' ')[0].toLowerCase() + '@example.com', members: [...adults, ...students], status, method: status === 'unpaid' ? '' : METHODS[Math.floor(rnd() * 4)], pizza: ev.extra ? Math.floor(rnd() * 3) : 0, sent: rnd() > .1, walkin: false, checkins: [] });
+    fams.push({ id: ev.id + i, ev: ev.id, code: (ev.id + '-' + (1000 + i * 37)).toUpperCase(), parent: adults[0].name, email: adults[0].name.toLowerCase().replace(/\s+/g, '.') + '@example.com', members: [...adults, ...students], status, method: status === 'unpaid' ? '' : METHODS[Math.floor(rnd() * 4)], pizza: ev.extra ? Math.floor(rnd() * 3) : 0, sent: rnd() > .1, walkin: false, checkins: [] });
   }
 });
 // a few already checked in so the dashboard has life
 fams.filter(f => f.ev === 'gn').slice(0, 6).forEach((f, i) => { f.members.forEach(m => m.in = true); f.checkins.push(`6:${String(12 - i).padStart(2, '0')} PM`); });
-const S = { mode: innerWidth < 600 ? 'parent' : 'admin', view: 'dash', ev: 'gn', q: '', pay: 'all', open: null, desk: '', pv: 'events', pev: null, myTickets: [], showTicket: null, toast: '' };
+const S = { imp: null, maps: {}, lastImport: {}, myEmail: '', mode: innerWidth < 600 ? 'parent' : 'admin', view: 'dash', ev: 'gn', q: '', pay: 'all', open: null, desk: '', pv: 'events', pev: null, myTickets: [], showTicket: null, toast: '' };
+/* ---------------- Google Form responses (simulated) ----------------
+   Essentials: each event's sign-up is a Google Form run by the PTA. A volunteer downloads the
+   responses as CSV and imports them; the app matches columns once and never makes duplicates. */
+const FORM_HEADERS = ev => ['Timestamp', 'Parent/guardian name', 'Email address', 'Student name', 'Student grade', 'Second student (optional)', 'Second student grade', 'Other adults coming', ...(ev.extra ? [ev.extra] : []), ...(ev.price || ev.extra ? ['How will you pay?'] : []), ...(ev.id === 'gn' ? ['Family T-shirt size (optional)'] : [])];
+const RESP = {};
+EVENTS.forEach((ev, k) => {
+  const H = FORM_HEADERS(ev), row = (vals) => Object.fromEntries(H.map((h, i) => [h, vals[i] ?? '']));
+  const pay = ev.price || ev.extra ? ['Zelle'] : [];
+  const extra = ev.extra ? ['1'] : [];
+  RESP[ev.id] = [
+    row(['11/9/2026 18:02', 'Priya Shah', 'priya.shah@example.com', 'Anika Shah', '2', '', '', '1', ...extra, ...pay]),
+    row(['11/10/2026 07:45', 'Tom Becker', 'tom.becker@example.com', 'Ella Becker', 'K', 'Max Becker', '3', '0', ...extra, ...(pay.length ? ['Cash'] : [])]),
+    row(['11/10/2026 21:13', 'Dana Ortiz', 'dana.ortiz@example.com', 'Leo Ortiz', '4', '', '', '2', ...extra, ...pay])
+  ];
+  // one family already in the app re-submits with a change (an extra adult) → shows as "updated", not a duplicate
+  const f = fams.find(x => x.ev === ev.id);
+  const kids = f.members.filter(m => m.grade);
+  RESP[ev.id].push(row(['11/11/2026 08:30', f.parent, f.email, kids[0]?.name || '', kids[0]?.grade || '', kids[1]?.name || '', kids[1]?.grade || '', String(f.members.filter(m => !m.grade).length), ...(ev.extra ? [String(f.pizza)] : []), ...(pay.length ? [f.method || 'Zelle'] : [])]));
+});
+// Game Night's team added their own question; the app keeps it as an "other answer"
+RESP.gn.forEach((r, i) => { r['Family T-shirt size (optional)'] = ['Youth M', 'Adult L', '', 'Youth S'][i] || ''; });
+const APP_FIELDS = ev => [['parent', 'Parent name', true], ['email', 'Email', true], ['kid1', 'Student name', true], ['g1', 'Student grade'], ['kid2', 'Second student'], ['g2', 'Second student grade'], ['adults', 'Other adults coming'], ...(ev.extra ? [['pizza', ev.extra]] : []), ...(ev.price || ev.extra ? [['method', 'Payment method']] : [])];
+function guessMap(ev, headers) {
+  const pick = (re, not) => headers.find(h => re.test(h) && !(not && not.test(h))) || '';
+  const kid = /student|child|kid/i, second = /second|2nd|another|\b2\b/i;
+  return { parent: pick(/parent|guardian/i) || pick(/name/i, kid), email: pick(/e-?mail/i), kid1: pick(kid, /grade|second|2nd|another|\b2\b/i), g1: pick(/grade/i, second), kid2: pick(new RegExp('(' + second.source + ').*(' + kid.source + ')|(' + kid.source + ').*(' + second.source + ')', 'i'), /grade/i), g2: headers.find(h => /grade/i.test(h) && second.test(h)) || '', adults: pick(/adult/i), pizza: ev.extra ? pick(/pizza/i) : '', method: pick(/pay/i) };
+}
+function parseCsv(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+    else if (c === '"') q = true; else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  const clean = rows.filter(r => r.some(x => x.trim()));
+  const headers = (clean.shift() || []).map(h => h.trim());
+  return { headers, rows: clean.map(r => Object.fromEntries(headers.map((h, i) => [h, (r[i] || '').trim()]))) };
+}
+const toCsv = (headers, rows) => [headers, ...rows.map(r => headers.map(h => r[h] ?? ''))].map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
+function planImport(ev, imp) {
+  const m = imp.map, get = (r, k) => (m[k] ? String(r[m[k]] ?? '').trim() : '');
+  const seen = new Set();
+  return imp.rows.map(r => {
+    const parent = get(r, 'parent'), email = get(r, 'email').toLowerCase(), last = parent.split(' ').pop();
+    if (!parent || !/^\S+@\S+\.\S+$/.test(email)) return { status: 'skip', why: !parent ? 'No parent name' : 'No valid email', parent: parent || '—', email };
+    if (seen.has(email)) return { status: 'skip', why: 'Same email twice in this file (kept the first)', parent, email };
+    seen.add(email);
+    const kids = [[get(r, 'kid1'), get(r, 'g1')], [get(r, 'kid2'), get(r, 'g2')]].filter(([n]) => n).map(([n, g]) => ({ name: n.includes(' ') ? n : n + ' ' + last, grade: g || '?', in: false }));
+    const adults = [{ name: parent, in: false }, ...Array.from({ length: Math.min(9, +get(r, 'adults') || 0) }, (_, i) => ({ name: i ? 'Guest ' + (i + 1) + ' of ' + last : 'Guest of ' + last, in: false }))];
+    const method = get(r, 'method').replace(/envelope.*/i, 'Envelope'), pizza = +get(r, 'pizza') || 0;
+    const existing = fams.find(f => f.ev === ev.id && f.email.toLowerCase() === email);
+    const members = [...adults, ...kids];
+    const used = new Set(Object.values(m).filter(Boolean));
+    const other = Object.fromEntries(Object.entries(r).filter(([h, v]) => v && !used.has(h) && !/^timestamp$/i.test(h)));
+    if (existing) {
+      const same = existing.members.map(x => x.name).join('|') === members.map(x => x.name).join('|') && (existing.method || '') === (method || existing.method || '') && (existing.pizza || 0) === pizza && JSON.stringify(existing.other || {}) === JSON.stringify(other);
+      return { status: same ? 'same' : 'update', parent, email, members, method, pizza, other, existing };
+    }
+    return { status: 'new', parent, email, members, method, pizza, other };
+  });
+}
+
 /* ---------------- helpers ---------------- */
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -175,10 +240,10 @@ function qrSvg(code) { // sample code pattern (not a scannable QR) seeded from t
   return `<svg class="qr" viewBox="0 0 ${n} ${n}" role="img" aria-label="Sample ticket code ${esc(code)}">${cells.map(([x, y]) => `<rect x="${x}" y="${y}" width="1" height="1"/>`).join('')}</svg>`;
 }
 /* ---------------- PTA admin ---------------- */
-const NAV = [['dash', '▦', 'Dashboard'], ['regs', '👥', 'Registrations'], ['desk', '✓', 'Check-in desk'], ['pay', '$', 'Payments'], ['review', '☑', 'Pre-event review'], ['reports', '↓', 'Reports & export'], ['emails', '✉', 'Automated emails']];
+const NAV = [['dash', '▦', 'Dashboard'], ['import', '⤓', 'Import sign-ups'], ['regs', '👥', 'Registrations'], ['desk', '✓', 'Check-in desk'], ['pay', '$', 'Payments'], ['review', '☑', 'Pre-event review'], ['reports', '↓', 'Reports & export'], ['emails', '✉', 'Automated emails']];
 function admin() {
   const ev = evOf(S.ev), list = famsOf(S.ev);
-  const body = { dash, regs, desk, pay, review, reports, emails }[S.view](ev, list);
+  const body = { dash, importView, regs, desk, pay, review, reports, emails }[S.view === 'import' ? 'importView' : S.view](ev, list);
   return `<div class="admin"><aside class="side">
     <div class="brand"><img src="${LION}" alt=""><div>Lakeville PTA<small>Events</small></div></div>
     ${NAV.map(([id, ic, label]) => `<button data-act="view" data-v="${id}" ${S.view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${ic}</span>${label}</button>`).join('')}
@@ -207,6 +272,42 @@ function dash(ev, list) {
     <div class="card"><h3>Before the event</h3>${reviewItems(list).slice(0, 4).map(([n, t, ok]) => `<div class="check"><span class="n ${ok ? 'ok' : 'warn'}">${ok ? '✓' : n}</span><span class="grow">${t}</span></div>`).join('')}<button class="btn ghost sm" style="margin-top:10px" data-act="view" data-v="review">Open pre-event review</button></div>
   </div>`;
 }
+function importView(ev) {
+  const imp = S.imp && S.imp.ev === ev.id ? S.imp : null, last = S.lastImport[ev.id];
+  const head0 = head('Import sign-ups', `${esc(ev.name)} · families sign up on the PTA’s Google Form`, '');
+  if (!imp) return head0 + `<div class="grid2"><div class="card" style="display:grid;gap:12px;align-content:start">
+      <h3>1 · Get the latest responses</h3>
+      <p class="muted">In Google Forms, open the event’s form → Responses → Download (.csv). Upload the whole file each time: families already imported are recognized by email and never get a second ticket.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="gform">Download from Google Forms (simulated)</button>
+      <label class="btn ghost" style="cursor:pointer">Upload a CSV file<input type="file" accept=".csv,text/csv" data-act="csvfile" hidden></label></div>
+      <div class="note">${RESP[ev.id].length} responses in this event’s form so far (sample data${S.myEmail ? ', plus anything you submit as a parent' : ''}).</div>
+    </div>
+    <div class="card" style="display:grid;gap:8px;align-content:start"><h3>Last import</h3>${last ? `<p><b>${last.n}</b> new · <b>${last.u}</b> updated · <b>${last.s}</b> unchanged${last.k ? ` · <b>${last.k}</b> skipped` : ''}</p><p class="muted">${esc(last.at)} · tickets emailed to new families</p>` : '<p class="muted">Not imported yet.</p>'}
+      <div class="note">Volunteers can import as often as they like. Tickets go out when a family is imported, so importing every day or two keeps families from waiting.</div></div></div>`;
+  if (imp.step === 'map') {
+    const fields = APP_FIELDS(ev);
+    return head0 + `<div class="card" style="display:grid;gap:12px">
+      <h3>2 · Match the form’s questions to the app</h3><p class="muted">${imp.rows.length} responses found in ${esc(imp.name)}. ${S.maps[ev.id] ? 'Using the matches you saved last time.' : 'We guessed the matches; check them once and the app remembers them for this event.'}</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px">${fields.map(([k, label, req]) => `<label class="f">${esc(label)}${req ? ' *' : ''}<select data-act="mapcol" data-v="${k}"><option value="">— not in the form —</option>${imp.headers.map(h => `<option ${imp.map[k] === h ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select></label>`).join('')}</div>
+      ${(() => { const used = new Set(Object.values(imp.map).filter(Boolean)), rest = imp.headers.filter(h => !used.has(h) && !/^timestamp$/i.test(h)); return rest.length ? `<div class="note">Kept as <b>other answers</b> on each family (shown on their record and in exports): ${rest.map(esc).join(', ')}</div>` : ''; })()}
+      <div style="display:flex;gap:8px"><button class="btn" data-act="imppreview" ${fields.filter(f => f[2]).every(([k]) => imp.map[k]) ? '' : 'disabled'}>Preview import</button><button class="btn ghost" data-act="impcancel">Cancel</button></div></div>`;
+  }
+  const plan = planImport(ev, imp), c = st => plan.filter(p => p.status === st).length;
+  const LBL = { new: '<span class="pill verified">New</span>', update: '<span class="pill in">Updated</span>', same: '<span class="pill" style="background:#eef0f4;color:#4b5563">No change</span>', skip: '<span class="pill unpaid">Skipped</span>' };
+  return head0 + `<div class="card" style="display:grid;gap:12px">
+    <h3>3 · Check and import</h3>
+    <p><b>${c('new')}</b> new families (they’ll get their QR ticket by email) · <b>${c('update')}</b> updated · <b>${c('same')}</b> already in the app, no change${c('skip') ? ` · <b>${c('skip')}</b> skipped` : ''}</p>
+    <div style="overflow:auto"><table><thead><tr><th></th><th>Family</th><th class="hide-sm">Email</th><th>Details</th></tr></thead><tbody>
+    ${plan.map(p => `<tr><td>${LBL[p.status]}</td><td><b>${esc(p.parent)}</b></td><td class="hide-sm">${esc(p.email)}</td><td class="muted">${p.status === 'skip' ? esc(p.why) : esc(p.members.map(m => m.name.split(' ')[0]).join(', ')) + (p.method ? ' · ' + esc(p.method) : '')}${p.status === 'update' ? ' · ticket stays the same' : ''}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div style="display:flex;gap:8px"><button class="btn" data-act="impgo" ${c('new') + c('update') ? '' : 'disabled'}>Import & email tickets</button><button class="btn ghost" data-act="impback">Back to matching</button></div></div>`;
+}
+function startImport(ev, name, text) {
+  const { headers, rows } = parseCsv(text);
+  if (!headers.length || !rows.length) { toast('That file has no responses'); return; }
+  const saved = S.maps[ev.id], map = saved && Object.values(saved).every(h => !h || headers.includes(h)) ? { ...saved } : guessMap(ev, headers);
+  S.imp = { ev: ev.id, step: 'map', name, headers, rows, map };
+}
 function filtered(list) {
   const q = S.q.trim().toLowerCase();
   return list.filter(f => (S.pay === 'all' || f.status === S.pay) && (!q || f.code.toLowerCase().includes(q) || f.members.some(m => m.name.toLowerCase().includes(q))));
@@ -232,6 +333,7 @@ function drawer() {
       <label class="f">Paid by<select data-act="setmethod" data-v="${f.id}"><option value="">—</option>${METHODS.map(m => `<option ${f.method === m ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
       ${f.pizza ? `<p>🍕 Pizza: ${f.pizza} order${f.pizza > 1 ? 's' : ''}</p>` : ''}
     </div>
+    ${f.other && Object.keys(f.other).length ? `<div class="card" style="display:grid;gap:6px"><h3>Other answers from the form</h3>${Object.entries(f.other).map(([k, v]) => `<p><span class="muted">${esc(k)}:</span> ${esc(v)}</p>`).join('')}</div>` : ''}
     <div class="card" style="display:grid;gap:10px;justify-items:center"><h3 style="justify-self:start">Digital ticket</h3>${qrSvg(f.code)}<small class="muted">${f.sent ? 'Emailed to ' + esc(f.email) : 'Not sent yet'}</small><button class="btn ghost sm" data-act="resend" data-v="${f.id}">Re-send ticket</button></div>
   </div></div>`;
 }
@@ -288,6 +390,7 @@ function parent() {
   let body = '';
   if (S.pv === 'events' && !S.pev) body = `<h2 style="color:var(--navy)">Upcoming events</h2>` + EVENTS.map(e => `<div class="card evcard" data-act="pev" data-v="${e.id}"><h3>${esc(e.name)}</h3><span class="muted">${esc(e.date)} · ${esc(e.time)}</span><span>${e.price ? money(e.price) + ' per ' + e.unit : 'Free'}</span></div>`).join('');
   else if (S.pv === 'events' && S.pev) body = signup(evOf(S.pev));
+  else if (S.pv === 'sent') body = `<div class="card" style="display:grid;gap:10px;text-align:center;justify-items:center"><div class="ok-screen" style="width:100%"><div class="big">✓</div><h2>Form submitted</h2><p>Thanks! Your QR ticket will be emailed to ${esc(S.myEmail)} once the PTA imports this week’s sign-ups.</p></div><div class="note" style="text-align:left">Prototype: switch to <b>PTA team → Import sign-ups</b> to import it, then come back to <b>My tickets</b>.</div></div>`;
   else if (S.pv === 'tickets') body = tickets();
   else if (S.pv === 'checkin') body = selfCheck();
   return `<div class="phone"><div class="p-head"><img src="${LION}" alt=""><div><b>Lakeville PTA</b><small>Events</small></div></div><div class="p-body">${body}</div>
@@ -296,6 +399,7 @@ function parent() {
 function signup(ev) {
   return `<button class="back" data-act="pev" data-v="">← All events</button>
   <div class="card" style="display:grid;gap:6px"><h2 style="color:var(--navy)">${esc(ev.name)}</h2><span class="muted">${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.place)}</span><p>${esc(ev.note)}</p></div>
+  <div class="note">In the real app this is the PTA’s <b>Google Form</b> for the event (prototype stand-in). Answers go to Google Forms first, then the PTA imports them.</div>
   <form class="card" style="display:grid;gap:10px" data-form="signup">
     <label class="f">Parent / guardian name<input type="text" name="parent" required placeholder="Your name"></label>
     <label class="f">Email for your ticket<input type="email" name="email" required placeholder="you@example.com"></label>
@@ -305,7 +409,7 @@ function signup(ev) {
     <label class="f">Other adults coming<input type="number" name="adults" min="0" value="0"></label>
     ${ev.extra ? `<label class="f">${esc(ev.extra)}<input type="number" name="pizza" min="0" value="0"></label>` : ''}
     ${ev.price || ev.extra ? `<label class="f">How will you pay?<select name="method"><option>Zelle</option><option>Cash</option><option>Check</option><option>Envelope to school</option></select></label><small class="muted">The PTA confirms your payment and your ticket updates automatically.</small>` : ''}
-    <button class="btn" type="submit">Sign up</button></form>`;
+    <button class="btn" type="submit">Submit form</button></form>`;
 }
 function ticketCard(f) {
   const ev = evOf(f.ev);
@@ -313,12 +417,13 @@ function ticketCard(f) {
   <div class="t-mid">${qrSvg(f.code)}<code>${esc(f.code)}</code>${PILL[f.status]}</div>
   <div class="t-bot"><b>${esc(f.parent)}</b><span>${esc(f.members.map(m => m.name.split(' ')[0]).join(', '))} · ${people(f)} people</span>${f.pizza ? `<span>🍕 ${f.pizza} pizza order${f.pizza > 1 ? 's' : ''}</span>` : ''}<span>${money(amount(f))} ${f.method ? '· ' + esc(f.method) : ''}</span></div></div>`;
 }
+const myFams = () => S.myEmail ? fams.filter(f => f.email.toLowerCase() === S.myEmail) : [];
 function tickets() {
-  const mine = fams.filter(f => S.myTickets.includes(f.id));
-  return `<h2 style="color:var(--navy)">My tickets</h2>` + (mine.length ? mine.map(ticketCard).join('') : `<div class="card"><p>No tickets yet. Sign up for an event and your ticket appears here (and in your email).</p></div>`);
+  const mine = myFams();
+  return `<h2 style="color:var(--navy)">My tickets</h2>` + (mine.length ? mine.map(ticketCard).join('') : `<div class="card"><p>${S.myEmail ? 'Your sign-up is in. Your ticket arrives here and in your email after the PTA imports sign-ups from the form.' : 'No tickets yet. Sign up for an event using the PTA’s form; your ticket arrives by email once the PTA imports it.'}</p></div>`);
 }
 function selfCheck() {
-  const mine = fams.filter(f => S.myTickets.includes(f.id));
+  const mine = myFams();
   if (!mine.length) return `<div class="card"><p>Sign up for an event first. At the door, scan the QR code on the sign to check yourself in.</p></div>`;
   const f = fams.find(x => x.id === S.showTicket) || mine[mine.length - 1];
   if (inCount(f) === people(f)) return `<div class="ok-screen ${f.status === 'verified' ? '' : 'pending'}"><div class="big">${f.status === 'verified' ? '✓' : '!'}</div><h2>${f.status === 'verified' ? 'You’re checked in!' : 'Checked in · payment pending'}</h2><p>${esc(evOf(f.ev).name)}<br>${esc(f.members.map(m => m.name.split(' ')[0]).join(', '))}</p><p><b>Show this screen to a PTA volunteer.</b></p><small>${esc(f.checkins.at(-1) || '')}</small></div>`;
@@ -350,9 +455,21 @@ document.addEventListener('click', e => {
     case 'walkin': { const name = $('#wName').value.trim(), n = Math.max(1, +$('#wCount').value || 1), m = $('#wPay').value; if (!name) { toast('Add a name for the walk-in'); return; }
       const w = { id: 'w' + Date.now(), ev: S.ev, code: ('WALK-' + Math.floor(Math.random() * 9000 + 1000)), parent: name, email: '', members: Array.from({ length: n }, (_, i) => ({ name: i ? name.split(' ').pop() + ' guest ' + i : name, in: true })), status: m ? 'verified' : 'unpaid', method: m, pizza: 0, sent: false, walkin: true, checkins: [nowTime()] };
       fams.push(w); toast(`${name} added and checked in${m ? ' · paid ' + m : ' · not paid'}`); return; }
-    case 'csv': { const rows = [['Family', 'Email', 'Students', 'People', 'Checked in', 'Payment', 'Method', 'Amount', 'Ticket']].concat(famsOf(S.ev).map(f => [f.parent, f.email, f.members.filter(m => m.grade).map(m => m.name).join('; '), people(f), inCount(f), f.status, f.method, amount(f), f.code]));
+    case 'csv': { const list = famsOf(S.ev), extraCols = [...new Set(list.flatMap(f => Object.keys(f.other || {})))];
+      const rows = [['Family', 'Email', 'Students', 'People', 'Checked in', 'Payment', 'Method', 'Amount', 'Ticket', ...extraCols]].concat(list.map(f => [f.parent, f.email, f.members.filter(m => m.grade).map(m => m.name).join('; '), people(f), inCount(f), f.status, f.method, amount(f), f.code, ...extraCols.map(c => f.other?.[c] || '')]));
       const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = evOf(S.ev).name.replace(/\s+/g, '-').toLowerCase() + '-registrations.csv'; document.body.append(a); a.click(); a.remove(); toast('CSV downloaded'); return; }
     case 'pv': S.pv = v; S.pev = null; break;
+    case 'gform': { const ev = evOf(S.ev); startImport(ev, ev.name + ' (Responses).csv', toCsv(FORM_HEADERS(ev), RESP[ev.id])); break; }
+    case 'imppreview': S.maps[S.imp.ev] = { ...S.imp.map }; S.imp.step = 'preview'; break;
+    case 'impback': S.imp.step = 'map'; break;
+    case 'impcancel': S.imp = null; break;
+    case 'impgo': { const ev = evOf(S.imp.ev), plan = planImport(ev, S.imp); let n = 0, u = 0;
+      plan.forEach(p => {
+        if (p.status === 'new') { n++; fams.push({ id: 'imp' + Date.now() + n, ev: ev.id, code: (ev.id + '-' + Math.floor(Math.random() * 9000 + 1000)).toUpperCase(), parent: p.parent, email: p.email, members: p.members, status: ev.price || p.pizza ? 'pending' : 'verified', method: p.method, pizza: p.pizza, other: p.other, sent: true, walkin: false, checkins: [] }); }
+        if (p.status === 'update') { u++; const f = p.existing, was = new Map(f.members.map(m => [m.name, m.in])); f.members = p.members.map(m => ({ ...m, in: !!was.get(m.name) })); if (p.method) f.method = p.method; f.pizza = p.pizza; f.other = p.other; }
+      });
+      S.lastImport[ev.id] = { n, u, s: plan.filter(p => p.status === 'same').length, k: plan.filter(p => p.status === 'skip').length, at: 'Imported ' + nowTime() };
+      S.imp = null; toast(`${n} new famil${n === 1 ? 'y' : 'ies'} imported · tickets emailed${u ? ` · ${u} updated` : ''}`); return; }
     case 'pev': S.pev = v || null; break;
     case 'selfin': checkIn(f, f.members.map((_, i) => i)); break;
   }
@@ -360,7 +477,9 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target, f = fams.find(x => x.id === t.dataset.v);
-  if (t.dataset.act === 'ev') { S.ev = t.value; S.open = null; }
+  if (t.dataset.act === 'ev') { S.ev = t.value; S.open = null; S.imp = null; }
+  else if (t.dataset.act === 'mapcol') S.imp.map[t.dataset.v] = t.value;
+  else if (t.dataset.act === 'csvfile') { const file = t.files[0]; if (!file) return; file.text().then(text => { startImport(evOf(S.ev), file.name, text); render(); }); return; }
   else if (t.dataset.act === 'payf') S.pay = t.value;
   else if (t.dataset.act === 'setpay') { f.status = t.value; if (t.value === 'verified') toast('Verified · updated ✅ ticket emailed'); }
   else if (t.dataset.act === 'setmethod' || t.dataset.act === 'quickmethod') f.method = t.value;
@@ -373,12 +492,11 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('submit', e => {
   if (e.target.dataset.form !== 'signup') return; e.preventDefault();
-  const d = new FormData(e.target), ev = evOf(S.pev), last = String(d.get('parent')).trim().split(' ').pop();
-  const kids = [[d.get('kid1'), d.get('g1')], [d.get('kid2'), d.get('g2')]].filter(([n]) => String(n || '').trim()).map(([n, g]) => ({ name: String(n).trim().includes(' ') ? String(n).trim() : String(n).trim() + ' ' + last, grade: g, in: false }));
-  const adults = [{ name: String(d.get('parent')).trim(), in: false }, ...Array.from({ length: +d.get('adults') || 0 }, (_, i) => ({ name: last + ' adult ' + (i + 2), in: false }))];
-  const f = { id: 'me' + Date.now(), ev: ev.id, code: (ev.id + '-' + Math.floor(Math.random() * 9000 + 1000)).toUpperCase(), parent: adults[0].name, email: String(d.get('email')), members: [...adults, ...kids], status: ev.price || +d.get('pizza') ? 'pending' : 'verified', method: String(d.get('method') || ''), pizza: +d.get('pizza') || 0, sent: true, walkin: false, checkins: [] };
-  fams.push(f); S.myTickets.push(f.id); S.showTicket = f.id; S.pv = 'tickets'; S.pev = null; S.ev = ev.id;
-  toast('You’re signed up! Ticket emailed to ' + f.email);
+  const d = new FormData(e.target), ev = evOf(S.pev), H = FORM_HEADERS(ev);
+  const vals = [new Date().toLocaleString(), d.get('parent'), d.get('email'), d.get('kid1'), d.get('kid1') ? d.get('g1') : '', d.get('kid2'), d.get('kid2') ? d.get('g2') : '', d.get('adults'), ...(ev.extra ? [d.get('pizza')] : []), ...(ev.price || ev.extra ? [d.get('method')] : [])];
+  RESP[ev.id].push(Object.fromEntries(H.map((h, i) => [h, String(vals[i] ?? '').trim()])));
+  S.myEmail = String(d.get('email')).trim().toLowerCase(); S.pv = 'sent'; S.pev = null; S.ev = ev.id; S.imp = null;
+  render();
 });
 render();
 </script>

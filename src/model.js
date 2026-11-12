@@ -28,7 +28,9 @@ const features=[
 ['accounting','Accounting connection','Send event money in and out to your bookkeeping system.','pro']];
 // "Looking ahead": Lakeville-facing questions about possible future upgrades (the Pro list, minus anything offered in Essentials).
 // [feature id, question, hint]. Never name the tier or a price here.
+// Built-in sign-up (no Google Forms) is an upgrade: decided Nov 11.
 const AHEAD=[
+['signupform','Would you like families to sign up inside the app instead of a Google Form?','Your plan uses your Google Forms: a volunteer downloads the responses and uploads them, then tickets go out. In-app sign-up would send each family’s ticket the moment they register, with no downloading or uploading.'],
 ['onlinepay','Would families ever pay by credit or debit card in the app?','Today your plan tracks Zelle, cash, check and envelope payments. Card payments would go straight to the PTA’s own account, with a small card fee per payment.'],
 ['vendors','Do you need a place to track vendors and event expenses?','For example food trucks, a DJ, rentals or supplies: quotes, purchases and receipts for each event.'],
 ['budget','Would you like to plan a budget for each event?','Set a budget, then see money in vs. money out and what each event raised.'],
