@@ -15,7 +15,8 @@ const features=[
 ['events','Unlimited events','Family nights, socials and fundraisers, September to June.','base'],
 ['access','Volunteer access','Multiple volunteer accounts with permissions you control.','base'],
 ['reminders','Automated emails','Confirmations, reminders and event details sent for you.','base'],
-['volunteers','Volunteer sign-up slots','List the helpers each event needs (e.g. ticket table 5–6 pm); volunteers sign up and get a reminder.','base'],
+['volunteers','Volunteer sign-up slots','List the helpers each event needs (e.g. ticket table 5–6 pm); volunteers sign up, get a reminder and are checked in at the event. Email them anytime.','base'],
+['groups','Grade & teacher groups','Students are tagged by grade (and teacher) when families sign up, so you can email or report by grade.','base'],
 ['calendar','Events calendar','All upcoming events on one page; families add them to their phone calendar.','base'],
 ['announce','Email registered families','Send a quick update to everyone signed up for an event: parking, weather, what to bring.','base'],
 ['mobile','Phone-friendly','Easy to use on a phone, especially at the check-in table.','base'],
@@ -41,6 +42,16 @@ const AHEAD=[
 ['reuse','Would you start next year’s event from last year’s details?','Copy an event’s settings, questions and volunteer jobs.'],
 ['accounting','Should event money in and out go to your bookkeeping system?','For example QuickBooks or a treasurer’s spreadsheet.']];
 const INTEREST=['Yes, we’d use this','Maybe later','Not needed','Not sure'];
+// What Lakeville gets in School-Year Essentials (shown on the Start page). Keep in step with the Scope sheet.
+const INCLUDED=[
+['Sign-ups',['A sign-up page for every event, with your own questions (pizza count, T-shirt size…)','Already using Google Forms or a spreadsheet? Import it; nobody gets a duplicate ticket','One registration per family: parents, students and guests together']],
+['Digital tickets',['One QR ticket per family, emailed the moment they sign up','Edit and re-send tickets for last-minute changes','An updated ✅ ticket once their payment is confirmed']],
+['Payment tracking',['Track Zelle, cash, check and envelope payments','Verified / Pending / Not paid for every family','Automatic reminders to families who haven’t paid']],
+['Event night check-in',['4 or more volunteers checking in at once, each on their own phone','Scan the QR code or search by parent name, student name or ticket code','Check in part of a family as they arrive, plus walk-ins at the door','Paid / Not paid shown at the door; families can also self check-in with a ✅ screen']],
+['Volunteers',['Volunteer slots for each event, with reminders the day before','Email your volunteers, add helpers by hand, check them in on the night','Volunteer accounts with permissions you control']],
+['Communication',['Automatic confirmations and reminders','Email everyone registered for an event, or just one grade','See how many emails were delivered and opened','An events calendar families can add to their phone']],
+['Reports',['Live dashboard: registered, checked in, attendance rate, payments','Pre-event review of who’s registered, paid, pending or missing details','No-shows list after each event','Reports by grade and teacher, with Excel/CSV export']],
+['Everything else',['Unlimited events, September to June','Works on any phone, tablet or computer','A “Get started” checklist, plus setup, training, email support and updates from DBY']]];
 const MAX_EVENTS=10, EVENT_FIELDS=6;
 const EVENT_ORDER=['Model this one first','Next','Later'];
 const PRIORITY=['Must Have','Nice to Have','Not Sure'];
@@ -57,5 +68,5 @@ preview:[f('works','What already fits Lakeville in this draft?'),f('changes','Wh
 workflow:[f('event','Which event are you describing?','Pick one of the events from Current events.'),...steps.map((s,i)=>f('step'+i,s,'Describe Lakeville today and how you would improve this step.')),f('exceptions','What happens when something changes?','Full event, cancellation, failed payment, walk-in or missing volunteer.'),f('lead','PTA lead / event organizer','Who plans events? Can they publish or do they need approval?'),f('admin','App administrator','Who manages access, approvals and officer handover?'),f('volunteer','Volunteer','What may they see or change? Who may check families in?'),f('parent','Parent / guardian','What should they manage for their own family?'),f('sensitive','Information and permissions','Who may see family details, export lists and approve refunds?')],
 questions:[f('firstVersion','Which features in your plan matter most for your first event?'),f('volume','How many events and families should we plan for?'),f('platform','How should people access it?','Mobile-friendly website, app-store download or not sure?'),f('registration','How do registrations work?','By family or individual child? Are guests and walk-ins allowed?'),f('communication','How do you communicate with families today?'),f('timing','Is there a target event or launch date?'),f('decision','Who will review the concept and approve the scope?'),f('success','What would make the first event a success?'),f('accountingTools','What do you use for bookkeeping and payments today?'),{key:'accountingNeed',label:'What does “accounting together” mean?',options:['Show event totals','Sync payments, fees and refunds','Manage full PTA bookkeeping','Not Sure']},f('pricingCore','What accounting functions in DBY’s existing system would be useful?','Describe what already exists or mark Not Sure. Integration is not connected in this portal.'),f('financialOwner','Who reconciles payments and approves refunds?'),f('financialData','What should flow between the systems?','For example event reference, transaction reference, amount, fee, refund and payout status.'),f('retention','What information must be kept, and for how long?'),f('open','Other questions or ideas')]
 };
-return {AHEAD,INTEREST,MAX_EVENTS,EVENT_FIELDS,EVENT_ORDER,tabs,features,steps,sections,PRIORITY,SIGNAL,TIERS,OWNER_SECTIONS,INTRO_KEY:'intro'};
+return {INCLUDED,AHEAD,INTEREST,MAX_EVENTS,EVENT_FIELDS,EVENT_ORDER,tabs,features,steps,sections,PRIORITY,SIGNAL,TIERS,OWNER_SECTIONS,INTRO_KEY:'intro'};
 })();

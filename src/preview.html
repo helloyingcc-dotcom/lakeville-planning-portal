@@ -154,7 +154,7 @@ EVENTS.forEach(ev => {
 // a few already checked in so the dashboard has life
 fams.filter(f => f.ev === 'gn').slice(0, 6).forEach((f, i) => { f.members.forEach(m => m.in = true); f.checkins.push(`6:${String(12 - i).padStart(2, '0')} PM`); });
 const SENT = {};
-const S = { helper: '', imp: null, maps: {}, lastImport: {}, myEmail: '', mode: innerWidth < 600 ? 'parent' : 'admin', view: 'dash', ev: 'gn', q: '', pay: 'all', open: null, desk: '', pv: 'events', pev: null, myTickets: [], showTicket: null, toast: '' };
+const S = { shared: false, helper: '', imp: null, maps: {}, lastImport: {}, myEmail: '', mode: innerWidth < 600 ? 'parent' : 'admin', view: 'dash', ev: 'gn', q: '', pay: 'all', open: null, desk: '', pv: 'events', pev: null, myTickets: [], showTicket: null, toast: '' };
 /* ---------------- Google Form responses (simulated) ----------------
    Essentials: each event's sign-up is a Google Form run by the PTA. A volunteer downloads the
    responses as CSV and imports them; the app matches columns once and never makes duplicates. */
@@ -258,7 +258,10 @@ function dash(ev, list) {
   const ver = list.filter(f => f.status === 'verified'), pen = list.filter(f => f.status === 'pending'), un = list.filter(f => f.status === 'unpaid');
   const pct = list.length ? Math.round(ver.length / list.length * 100) : 0, a = ver.length / (list.length || 1) * 360, b = a + pen.length / (list.length || 1) * 360;
   const recent = list.filter(f => f.checkins.length).slice(-6).reverse();
-  return head(esc(ev.name), `${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.place)}`, `<button class="btn" data-act="view" data-v="desk">Open check-in desk</button>`) +
+  const steps = [['Add your logo & school colors', true, null], ['Create your first event', true, null], ['Add sign-up questions', ev.questions.length > 0, 'form'], ['Add volunteer slots', ev.slots.length > 0, 'vols'], ['Share the sign-up link', S.shared, 'form'], ['Get your first sign-ups', list.length > 0, 'regs']], done = steps.filter(x => x[1]).length;
+  const starter = done < steps.length ? `<div class="card" style="display:grid;gap:8px;margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3>Get started · ${done} of ${steps.length} done</h3><div style="flex:1;max-width:220px;height:8px;background:var(--soft);border-radius:4px"><div style="height:8px;border-radius:4px;background:var(--gold);width:${Math.round(done / steps.length * 100)}%"></div></div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px">${steps.map(([t, ok, go]) => `<div class="check" style="border:0;padding:4px 0"><span class="n ${ok ? 'ok' : 'warn'}" style="min-width:24px;height:24px">${ok ? '✓' : '•'}</span><span class="grow">${t}</span>${!ok && go ? `<button class="btn ghost sm" data-act="view" data-v="${go}">Go</button>` : ''}</div>`).join('')}</div></div>` : '';
+  return head(esc(ev.name), `${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.place)}`, `<button class="btn" data-act="view" data-v="desk">Open check-in desk</button>`) + starter +
   `<div class="stats">
     <div class="card stat"><div class="ic" style="background:#e6ecfa">👥</div><div><b>${reg}</b><span>Registered guests</span></div></div>
     <div class="card stat"><div class="ic" style="background:#e3f4ea">✓</div><div><b>${ins}</b><span>Checked in</span></div></div>
@@ -326,7 +329,9 @@ function volsView(ev) {
   const filled = ev.slots.reduce((n, x) => n + Math.min(x.need, x.people.length), 0), need = ev.slots.reduce((n, x) => n + x.need, 0);
   return head('Volunteers', `${esc(ev.name)} · ${filled} of ${need} spots filled`, '') +
   `<div class="grid2"><div class="card" style="display:grid;gap:4px;align-content:start"><h3>Volunteer slots</h3>
-    ${ev.slots.length ? ev.slots.map(x => `<div class="row"><div class="grow"><b>${esc(x.role)}</b><small>${esc(x.time)} · ${x.people.length}/${x.need} signed up${x.people.length ? ': ' + esc(x.people.join(', ')) : ''}</small>
+    ${ev.slots.length ? ev.slots.map(x => `<div class="row"><div class="grow"><b>${esc(x.role)}</b><small>${esc(x.time)} · ${x.people.length}/${x.need} signed up</small>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${x.people.map(n => `<button class="pill ${(x.here || []).includes(n) ? 'verified' : 'in'}" style="border:0;cursor:pointer" data-act="volin" data-v="${x.id}" data-n="${esc(n)}" title="Tap to check in">${(x.here || []).includes(n) ? '✓ ' : ''}${esc(n)}</button>`).join('')}
+        ${x.people.length < x.need ? `<input type="text" id="add-${x.id}" placeholder="Add a helper by name" style="width:170px;padding:4px 8px;font-size:12px"><button class="btn ghost sm" data-act="volsadd" data-v="${x.id}">Add</button>` : ''}</div>
       <div style="height:6px;background:var(--soft);border-radius:4px;margin-top:6px"><div style="height:6px;border-radius:4px;background:${x.people.length >= x.need ? 'var(--green)' : 'var(--gold)'};width:${Math.min(100, Math.round(x.people.length / x.need * 100))}%"></div></div></div>
       <button class="btn ghost sm" data-act="delslot" data-v="${x.id}">Remove</button></div>`).join('') : '<p class="muted">No volunteer slots yet.</p>'}
   </div>
@@ -335,10 +340,11 @@ function volsView(ev) {
     <label class="f">Time<input type="text" id="sTime" placeholder="e.g. 6:00–7:00 PM"></label>
     <label class="f">How many people<input type="number" id="sNeed" min="1" value="2"></label>
     <button class="btn" data-act="addslot">Add slot</button>
-    <div class="note">Helpers sign up from the event page (Parent view) and get a reminder email the day before.</div></div></div>`;
+    <div class="note">Helpers sign up from the event page (Parent view) and get a reminder email the day before. On event night, tap a name to check them in. To email them, use Email families → Volunteers.</div></div></div>`;
 }
 function mailView(ev, list) {
   const groups = { all: ['Everyone registered', list], unpaid: ['Not paid yet', list.filter(f => f.status !== 'verified')], vols: ['Volunteers for this event', ev.slots.flatMap(x => x.people)] };
+  ['K', '1', '2', '3', '4', '5'].forEach(g => { groups['g' + g] = [(g === 'K' ? 'Kindergarten' : 'Grade ' + g) + ' families', list.filter(f => f.members.some(m => m.grade === g))]; });
   const log = SENT[ev.id] || [];
   return head('Email families', `${esc(ev.name)} · quick updates to people signed up`, '') +
   `<div class="grid2"><div class="card" style="display:grid;gap:10px;align-content:start">
@@ -347,7 +353,7 @@ function mailView(ev, list) {
     <label class="f">Message<textarea id="mBody" rows="5">Please park in the back lot and use the gym doors. See you there!</textarea></label>
     <button class="btn" data-act="sendmail">Send email</button>
     <div class="note">Sent from “Lakeville PTA”; replies go to the PTA’s Gmail.</div></div>
-  <div class="card" style="display:grid;gap:6px;align-content:start"><h3>Sent for this event</h3>${log.length ? log.map(m => `<div class="row"><div class="grow"><b>${esc(m.subj)}</b><small>${esc(m.to)} · ${m.n} people · ${esc(m.at)}</small></div></div>`).join('') : '<p class="muted">Nothing sent yet.</p>'}</div></div>`;
+  <div class="card" style="display:grid;gap:6px;align-content:start"><h3>Sent for this event</h3>${log.length ? log.map(m => `<div class="row"><div class="grow"><b>${esc(m.subj)}</b><small>${esc(m.to)} · ${esc(m.at)}</small></div><span class="pill in">${m.n} delivered</span><span class="pill verified">${m.opened} opened</span></div>`).join('') : '<p class="muted">Nothing sent yet.</p>'}</div></div>`;
 }
 function icsFor(ev) {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//DBY//Lakeville PTA Events//EN', 'BEGIN:VEVENT', 'UID:' + ev.id + '@lakeville-pta', 'DTSTAMP:20261111T120000', 'DTSTART:' + ev.ics[0], 'DTEND:' + ev.ics[1], 'SUMMARY:' + ev.name.replace(/[,;]/g, ' '), 'LOCATION:Lakeville Elementary - ' + ev.place.replace(/[,;]/g, ' '), 'DESCRIPTION:' + ev.note.replace(/[,;]/g, ' '), 'END:VEVENT', 'END:VCALENDAR'];
@@ -526,18 +532,21 @@ document.addEventListener('click', e => {
     case 'pv': S.pv = v; S.pev = null; break;
     case 'ics': { const ev = evOf(v), a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([icsFor(ev)], { type: 'text/calendar' })); a.download = ev.id + '-lakeville-pta.ics'; document.body.append(a); a.click(); a.remove(); toast('Added to your calendar'); return; }
     case 'addslot': { const ev = evOf(S.ev), role = $('#sRole').value.trim(), time = $('#sTime').value.trim(), need = Math.max(1, +$('#sNeed').value || 1); if (!role || !time) { toast('Add the job and the time'); return; } ev.slots.push({ id: 's' + Date.now(), role, time, need, people: [] }); toast('Slot added'); return; }
+    case 'volsadd': { const x = evOf(S.ev).slots.find(y => y.id === v), inp = $('#add-' + v), name = inp?.value.trim(); if (!name) { toast('Type the helper’s name'); return; } if (x && !x.people.includes(name)) x.people.push(name); toast(name + ' added'); return; }
+    case 'volin': { const x = evOf(S.ev).slots.find(y => y.id === v), n = t.dataset.n; x.here ||= []; x.here = x.here.includes(n) ? x.here.filter(y => y !== n) : [...x.here, n]; break; }
     case 'delslot': { const ev = evOf(S.ev); ev.slots = ev.slots.filter(x => x.id !== v); break; }
     case 'volup': { const name = S.helper.trim(); if (!name) { toast('Type your name first'); $('#helperName')?.focus(); return; } const x = evOf(S.pev).slots.find(y => y.id === v); if (x && !x.people.includes(name) && x.people.length < x.need) x.people.push(name); toast('Thanks! You’re signed up to help.'); return; }
     case 'sendmail': { const ev = evOf(S.ev), list = famsOf(S.ev), k = $('#mTo').value, subj = $('#mSubj').value.trim(), body = $('#mBody').value.trim();
       if (!subj || !body) { toast('Add a subject and a message'); return; }
-      const n = k === 'all' ? list.length : k === 'unpaid' ? list.filter(f => f.status !== 'verified').length : ev.slots.flatMap(x => x.people).length;
-      (SENT[ev.id] ||= []).unshift({ subj, to: { all: 'Everyone registered', unpaid: 'Not paid yet', vols: 'Volunteers' }[k], n, at: nowTime() }); toast(`Email sent to ${n} ${n === 1 ? 'person' : 'people'}`); return; }
+      const gr = k[0] === 'g' ? k.slice(1) : null;
+      const n = gr ? list.filter(f => f.members.some(m => m.grade === gr)).length : k === 'all' ? list.length : k === 'unpaid' ? list.filter(f => f.status !== 'verified').length : ev.slots.flatMap(x => x.people).length;
+      (SENT[ev.id] ||= []).unshift({ subj, to: gr ? (gr === 'K' ? 'Kindergarten' : 'Grade ' + gr) + ' families' : { all: 'Everyone registered', unpaid: 'Not paid yet', vols: 'Volunteers' }[k], n, opened: Math.round(n * 0.7), at: nowTime() }); toast(`Email sent to ${n} ${n === 1 ? 'person' : 'people'}`); return; }
     case 'addq': { const ev = evOf(S.ev), label = $('#qLabel').value.trim(), type = $('#qType').value, opts = $('#qOpts').value.split(',').map(x => x.trim()).filter(Boolean);
       if (!label) { toast('Type the question first'); return; }
       if (type === 'select' && opts.length < 2) { toast('Add at least two choices for a dropdown'); return; }
       ev.questions.push({ id: 'q' + Date.now(), label, type, options: type === 'select' ? opts : undefined, required: $('#qReq').checked }); toast('Question added'); return; }
     case 'delq': { const ev = evOf(S.ev); ev.questions = ev.questions.filter(q => q.id !== v); break; }
-    case 'copylink': toast('Sign-up link copied'); return;
+    case 'copylink': S.shared = true; toast('Sign-up link copied'); return;
     case 'gform': { const ev = evOf(S.ev); startImport(ev, ev.name + ' (Responses).csv', toCsv(FORM_HEADERS(ev), RESP[ev.id])); break; }
     case 'imppreview': S.maps[S.imp.ev] = { ...S.imp.map }; S.imp.step = 'preview'; break;
     case 'impback': S.imp.step = 'map'; break;

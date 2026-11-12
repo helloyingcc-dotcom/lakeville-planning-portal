@@ -196,3 +196,7 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .ahead-intro p{margin:0;line-height:1.5}
 .tier-badge.ahead{background:#fff4dc;color:#7a4f00}
 .ahead-says{font-size:12px;background:#f5f7fc;border-radius:8px;padding:6px 9px;color:#1c2a4b}
+.included .included-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px 22px;margin-top:12px}
+.included-group h3{margin:0 0 6px;font-size:15px;color:#1c2a4b}
+.included-group ul{margin:0;padding-left:18px;display:grid;gap:4px;font-size:13.5px;line-height:1.45}
+.included-group li::marker{color:#e2a634}
