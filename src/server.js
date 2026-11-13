@@ -481,15 +481,10 @@ async function notifyPost(request, env, user) {
   const name = g[0].asked_by, to = await personEmail(env, name);
   if (!to) return json({ error: 'No email address found for ' + (name || 'this person') + '.' }, 400);
   const { label, page } = fieldLabel(p.target), first = name.split(' ')[0], link = portalUrl(env) + '/#q=' + encodeURIComponent(p.target) + '&v=resp';
-  const rows = g.filter(d => d.kind !== 'ask'), asks = g.filter(d => d.kind === 'ask');
-  const waiting = rows.filter(d => d.status === 'waiting').length, open = asks.filter(d => d.status !== 'answered').length;
-  const need = [waiting ? waiting + (waiting === 1 ? ' item' : ' items') + ' to approve or reply to' : '', open ? open + (open === 1 ? ' question' : ' questions') + ' for you' : ''].filter(Boolean).join(' and ');
-  const note = typeof p.note === 'string' ? clip(p.note, 1000) : '';
-  await sendEmail(env, { to, replyTo: ownerEmails(env)[0], subject: 'Ying responded to your answer: ' + clip(label.replace(/^Event \d+ · /, ''), 70),
-    html: emailShell(`<p>Hi ${esc(first)},</p><p>I went through your answer to <strong>“${esc(label)}”</strong>${page ? ' on the ' + esc(page) + ' page' : ''} and wrote how we’ll handle each part.${need ? ' There ' + (waiting + open === 1 ? 'is ' : 'are ') + esc(need) + '.' : ''}</p>${note ? '<p>' + esc(note).replace(/\n/g, '<br>') + '</p>' : ''}`,
-      rows.map(d => esc(d.title)).concat(asks.map(d => '<em>Question:</em> ' + esc(clip(d.title, 160)))), 'Review in the planning portal', link,
-      'You can approve each line, approve them all at once, or reply. — Ying, DBY'),
-    text: `Hi ${first},\n\nI went through your answer to "${label}" and wrote how we'll handle each part.${need ? ' There ' + (waiting + open === 1 ? 'is ' : 'are ') + need + '.' : ''}\n${note ? '\n' + note + '\n' : ''}\n${rows.map(d => '- ' + d.title).concat(asks.map(d => '- Question: ' + d.title)).join('\n')}\n\nReview it here: ${link}\n\n— Ying, DBY` });
+  const short = label.replace(/^Event \d+ · /, '');
+  await sendEmail(env, { to, replyTo: ownerEmails(env)[0], subject: 'Ready for your response: ' + clip(short, 70),
+    html: emailShell(`<p>Hi ${esc(first)},</p><p><strong>“${esc(short)}”</strong> is ready for your response. Please go here:</p>`, [], 'Open it in the planning portal', link, '— Ying, DBY'),
+    text: `Hi ${first},\n\n"${short}" is ready for your response. Please go here: ${link}\n\n— Ying, DBY` });
   await env.DB.prepare('INSERT INTO notify_sent (id,target,to_name,to_email,sent_by,sent_at) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), p.target, name, to, user.email, nowIso()).run();
   return json({ ok: true, to: name });
 }

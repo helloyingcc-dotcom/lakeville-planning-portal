@@ -1056,15 +1056,14 @@ function decZone(target) {
 }
 /* owner: let the person who answered know the response is ready (email via the portal, or her own email / text app) */
 function notifyMessage(target, rows, asks, first) {
-  const label = (allFields(target)?.label || 'your answer'), waiting = rows.filter(r => r.status === 'waiting').length, open = asks.filter(a => a.status !== 'answered').length;
-  const need = [waiting ? waiting + (waiting === 1 ? ' item' : ' items') + ' to approve or reply to' : '', open ? open + (open === 1 ? ' question' : ' questions') + ' for you' : ''].filter(Boolean).join(' and ');
-  return `Hi ${first}! I went through your answer to "${label}" on the planning portal and wrote how we'll handle each part.${need ? ' There ' + (waiting + open === 1 ? 'is ' : 'are ') + need + '.' : ''} You can approve each line, approve them all at once, or reply. Here's the link: ${window.location.origin}/#q=${encodeURIComponent(target)}&v=resp\n\nThanks! – Ying`;
+  const label = (allFields(target)?.label || 'your answer').replace(/^Event \d+ · /, '');
+  return `Hi ${first}, “${label}” is ready for your response. Please go here: ${window.location.origin}/#q=${encodeURIComponent(target)}&v=resp – Ying`;
 }
 function allFields(target) { const [, sec, key] = target.split(':'); return (sections[sec] || []).find(f => f.key === key); }
 function notifyBox(target, rows, asks) {
   const g = rows[0] || asks[0], name = g?.asked_by; if (!name) return null;
   const first = name.split(' ')[0], N = D.notify || {}, email = N.people?.[name], sent = N.sent?.[target], msg = notifyMessage(target, rows, asks, first);
-  const subject = 'Ying responded to your answer on the planning portal';
+  const subject = 'Ready for your response: ' + (allFields(target)?.label || 'your answer').replace(/^Event \d+ · /, '');
   const st = D.notifyState[target] || '';
   const emailBtn = N.ready && email
     ? h('button', { type: 'button', class: 'primary', disabled: st === 'sending', onclick: async () => {

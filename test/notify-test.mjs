@@ -24,7 +24,7 @@ const s = await call('ying', '/api/notify', J('POST', { target }));
 ok(s.j?.ok && s.j.to === 'Jessie', 'sent ' + JSON.stringify(s.j));
 let m = await mail();
 ok(m.length === 1 && m[0].to[0] === 'jessie.smith@example.com' && m[0].reply_to === 'ying@example.com', 'email to Jessie, reply to Ying');
-ok(/2 items to approve or reply to and 1 question for you/.test(m[0].text) && m[0].text.includes('/#q=' + encodeURIComponent(target) + '&v=resp'), 'body counts + deep link');
+ok(/is ready for your response. Please go here/.test(m[0].text) && /^Ready for your response/.test(m[0].subject) && m[0].text.includes('/#q=' + encodeURIComponent(target) + '&v=resp'), 'body counts + deep link');
 ok(!/\bPro\b|\$\d/.test(m[0].html + m[0].text + m[0].subject), 'no Pro or prices');
 g = await call('ying', '/api/decisions');
 ok(g.j.notify.sent[target]?.to === 'Jessie', 'sent recorded');
