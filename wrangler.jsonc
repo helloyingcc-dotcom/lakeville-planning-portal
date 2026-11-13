@@ -20,5 +20,7 @@
     "OWNER_EMAILS": "yingaz@gmail.com",
     "ACCESS_AUD": "37fc497fa3e217e669dcfe3c19091911ae17bdae35d958bca77b11b1e3c745ef"
   },
+  // Every 2 minutes: email DBY a grouped alert about new Lakeville activity (needs RESEND_API_KEY).
+  "triggers": { "crons": ["*/2 * * * *"] },
   "observability": { "enabled": true }
 }

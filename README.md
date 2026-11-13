@@ -43,6 +43,7 @@ Answers, comments and names live in the D1 database (`lakeville-planning`), not 
 The portal was first built on ChatGPT Sites (Nov 2026). It was rebuilt here as a standalone Worker so it can be updated by any tool at any time.
 
 - `test/decisions-test.py`: Decisions — DBY answers with a clean one-screen preview, Lakeville gets a banner/badge, asks, approves; editing an answer sends it back for approval.
+- `test/notify-test.mjs` (harness with `MOCK_MAIL=1`): "Email Jessie" sends one email with a link to the question; Lakeville approvals, responses, answers and questions are grouped into one alert to DBY by the cron (`GET /__cron` in the harness). Needs the `RESEND_API_KEY` secret in production.
 - `test/label-test.py`: names inside answer boxes.
 - `test/ask-test.py`: Ask box with a stand-in AI (start the harness with `MOCK_AI=1`).
 - `test/demo-test.py`: app demo panel, "For you", links between demo and portal.

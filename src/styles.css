@@ -314,3 +314,8 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .field-heading{flex-wrap:wrap}.field-heading>label{flex:1 1 220px;min-width:0}.field-heading .anchor-group{flex-wrap:wrap;row-gap:2px;flex-shrink:1}
 .dec-zone{container-type:inline-size}
 @container (max-width:600px){.dec-tr{grid-template-columns:1fr;gap:6px}.dec-ok{justify-content:flex-start}.dec-th{display:none}.dec-edhead{display:none}.dec-edrow{grid-template-columns:1fr}.dprev-frame{height:420px}}
+.notify-box{margin-top:12px;padding:12px 14px;border:1px dashed #c9d2e6;border-radius:10px;background:#f8faff;display:grid;gap:8px}
+.notify-head{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.notify-sent{color:#2e7d4f;font-size:13px;font-weight:600}
+.notify-box .btnlike{display:inline-block;border:1px solid #cfd6e4;background:#fff;border-radius:8px;padding:8px 14px;font-size:14px;color:inherit;text-decoration:none}
+.notify-box .btnlike.primary,.notify-box button.primary{background:#1f2f57;color:#fff;border-color:#1f2f57}

@@ -8,6 +8,8 @@
  *   ACCESS_TEAM_DOMAIN Cloudflare Access team domain, e.g. "lakeville" or "lakeville.cloudflareaccess.com".
  *   ACCESS_AUD         Cloudflare Access "Application Audience (AUD) tag".
  *   OWNER_EMAILS       Comma-separated emails that can see owner-only pages (e.g. Pro tier planning).
+ *   RESEND_API_KEY     (secret, optional) turns on email: DBY's "Email <name>" button, and alerts to OWNER_EMAILS when Lakeville
+ *                      approves, responds, answers or asks (grouped, sent by the every-2-minutes cron). NOTIFY_FROM overrides the sender.
  *   ANTHROPIC_API_KEY  (secret, optional) turns on the Ask box in the app demo. AI_MODEL overrides the model (default claude-sonnet-5-5).
  * Sign-in is handled by Cloudflare Access (email one-time code). This file only checks the signed token.
  */
@@ -44,6 +46,8 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS team_topics (name TEXT PRIMARY KEY NOT NULL COLLATE NOCASE, created_by TEXT NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS team_messages (seq INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, id TEXT NOT NULL UNIQUE, topic TEXT NOT NULL, ref_section TEXT, ref_field TEXT, ref_label TEXT, author_id TEXT NOT NULL, author_name TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL, edited_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS scope_flags (id TEXT PRIMARY KEY NOT NULL, target TEXT NOT NULL UNIQUE, kind TEXT NOT NULL, section TEXT, field_key TEXT, label TEXT NOT NULL, excerpt TEXT NOT NULL, note TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, answer TEXT DEFAULT '' NOT NULL, answer_note TEXT, answered_by TEXT, answered_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS notify_queue (id TEXT PRIMARY KEY NOT NULL, who TEXT NOT NULL, text TEXT NOT NULL, link TEXT NOT NULL, created_at TEXT NOT NULL, sent_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS notify_sent (id TEXT PRIMARY KEY NOT NULL, target TEXT NOT NULL, to_name TEXT NOT NULL, to_email TEXT NOT NULL, sent_by TEXT NOT NULL, sent_at TEXT NOT NULL)`,
   `INSERT OR IGNORE INTO team_topics (name,created_by,created_at) VALUES ('General','system','2026-11-11T00:00:00Z'),('Family Game Night','system','2026-11-11T00:00:01Z'),('Sweetheart Dance','system','2026-11-11T00:00:02Z'),('Car Show','system','2026-11-11T00:00:03Z'),('Literacy Night','system','2026-11-11T00:00:04Z')`,
 ];
 let schemaReady = null;
@@ -225,6 +229,7 @@ async function commentsPost(request, env, user) {
   }
   const message = await DB.prepare('SELECT * FROM comment_messages WHERE request_id=? AND author_id=?').bind(p.requestId, user.userId).first();
   if (!message) return json({ error: 'Comment not sent. Please retry.' }, 409);
+  if (!existing) { const t = await DB.prepare('SELECT section FROM comment_threads WHERE id=?').bind(message.thread_id).first(); await queueOwner(env, user, 'sent a question for DBY: ' + clip(message.body || '(attachment)', 220), t ? '/#tab=' + t.section : '/'); }
   return json({ message, threadId: message.thread_id });
 }
 async function commentsPatch(request, env, user) {
@@ -363,7 +368,7 @@ async function decisionsGet(env, user) {
   const d = await env.DB.prepare('SELECT * FROM decisions ORDER BY ord, num').all();
   const log = await env.DB.prepare(`SELECT l.id, l.decision_id, l.kind, ${NAME('l', 'author_id', 'author_name')} AS author_name, l.body, l.version, l.created_at FROM decision_log l ORDER BY l.created_at`).all();
   const by = {}; for (const l of log.results) (by[l.decision_id] ||= []).push(l);
-  return json({ decisions: d.results.map(x => ({ ...x, log: by[x.id] || [] })) });
+  return json({ decisions: d.results.map(x => ({ ...x, log: by[x.id] || [] })), ...(user.isOwner ? { notify: await notifyInfo(env) } : {}) });
 }
 function decisionInput(p) {
   const str = (v, max, req) => typeof v === 'string' && v.length <= max && (!req || v.trim());
@@ -407,6 +412,7 @@ async function decisionRespond(p, env, user) {
   if (['approve', 'changes'].includes(p.action) && Number(p.version) !== d.version) return json({ error: 'DBY just updated this. Please read the new version.', stale: true }, 409);
   if (['approve', 'changes', 'answer'].includes(p.action)) await env.DB.prepare('UPDATE decisions SET status=?, status_by=?, status_at=? WHERE id=?').bind({ approve: 'approved', changes: 'changes', answer: 'answered' }[p.action], user.displayName, nowIso(), p.id).run();
   await decLog(env, p.id, p.action, user, note, d.version);
+  if (p.action !== 'reply') await queueOwner(env, user, { approve: 'approved', changes: 'responded to', question: 'asked about', answer: 'answered' }[p.action] + ' “' + clip(d.title, 90) + '”' + (note ? ': ' + clip(note, 200) : ''), d.target ? '/#q=' + encodeURIComponent(d.target) + '&v=' + (d.kind === 'ask' ? 'ask' : 'resp') : '/');
   return json({ ok: true });
 }
 async function decisionsDelete(request, env, user) {
@@ -414,6 +420,78 @@ async function decisionsDelete(request, env, user) {
   const id = new URL(request.url).searchParams.get('id'); if (!uuid(id)) return json({ error: 'Invalid decision.' }, 400);
   await env.DB.batch([env.DB.prepare('DELETE FROM decision_log WHERE decision_id=?').bind(id), env.DB.prepare('DELETE FROM decisions WHERE id=?').bind(id)]);
   return json({ ok: true });
+}
+
+/* ---------------- email (Resend): DBY tells Lakeville a response is ready; Lakeville activity alerts DBY ---------------- */
+const PORTAL_URL = 'https://lakeville-planning.helloyingcc.workers.dev', NOTIFY_QUIET_MS = 90 * 1000;
+const clip = (t, n) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ownerEmails = env => String(env.OWNER_EMAILS || '').toLowerCase().split(/[\s,;]+/).filter(Boolean);
+const portalUrl = env => (env.PORTAL_URL || PORTAL_URL).replace(/\/$/, '');
+async function queueOwner(env, user, text, link) {
+  if (user.isOwner) return;
+  try { await env.DB.prepare('INSERT INTO notify_queue (id,who,text,link,created_at) VALUES (?,?,?,?,?)').bind(crypto.randomUUID(), user.displayName, text, link, nowIso()).run(); } catch (e) { console.error('notify queue', e); }
+}
+async function sendEmail(env, { to, subject, html, text, replyTo }) {
+  const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: env.NOTIFY_FROM || 'Ying at DBY <updates@dbyshop.com>', to: [].concat(to), subject, html, text, ...(replyTo ? { reply_to: replyTo } : {}) }) });
+  if (!r.ok) { const body = await r.text().catch(() => ''); console.error('resend', r.status, body); throw new Error('Email service said ' + r.status + ': ' + clip(body, 200)); }
+  return r.json().catch(() => ({}));
+}
+const emailShell = (intro, items, button, link, foot) => `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#1f2430;max-width:560px">${intro}${items.length ? '<ul style="padding-left:20px">' + items.map(i => '<li style="margin:4px 0">' + i + '</li>').join('') + '</ul>' : ''}<p style="margin:22px 0"><a href="${esc(link)}" style="background:#4f46e5;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;display:inline-block;font-weight:600">${esc(button)}</a></p><p style="color:#6b7280;font-size:13px">${foot}</p></div>`;
+// cron: send one grouped alert once Lakeville has been quiet for 90 seconds
+async function flushOwnerAlerts(env) {
+  if (!env.RESEND_API_KEY || !ownerEmails(env).length) return { sent: 0 };
+  await env.DB.prepare("UPDATE notify_queue SET sent_at='skipped' WHERE sent_at IS NULL AND created_at < ?").bind(new Date(Date.now() - 48 * 3600e3).toISOString()).run();
+  const q = (await env.DB.prepare('SELECT * FROM notify_queue WHERE sent_at IS NULL ORDER BY created_at LIMIT 60').all()).results;
+  if (!q.length || Date.now() - Date.parse(q[q.length - 1].created_at) < Number(env.NOTIFY_QUIET ?? NOTIFY_QUIET_MS)) return { sent: 0 };
+  const base = portalUrl(env), who = [...new Set(q.map(x => x.who))];
+  const subject = who.join(' & ') + (q.length === 1 ? ' ' + clip(q[0].text, 70) : ': ' + q.length + ' updates on the Lakeville portal');
+  await sendEmail(env, { to: ownerEmails(env), subject,
+    html: emailShell(`<p>New on the Lakeville planning portal:</p>`, q.map(x => `<a href="${esc(base + x.link)}" style="color:#4f46e5">${esc(x.who)}</a> ${esc(x.text)}`), 'Open the portal', base + q[0].link, 'Sent automatically by your planning portal.'),
+    text: q.map(x => `${x.who} ${x.text}\n${base + x.link}`).join('\n\n') });
+  await env.DB.prepare(`UPDATE notify_queue SET sent_at=? WHERE id IN (${q.map(() => '?').join(',')})`).bind(nowIso(), ...q.map(x => x.id)).run();
+  return { sent: q.length };
+}
+async function personEmail(env, name) {
+  if (!name) return null;
+  const row = await env.DB.prepare('SELECT email FROM people WHERE name=? COLLATE NOCASE').bind(name).first();
+  if (row) return row.email;
+  const seen = (await env.DB.prepare('SELECT email FROM presence').all()).results.map(r => r.email);
+  return seen.find(e => nameFromEmail(e).toLowerCase() === name.toLowerCase() || nameFromEmail(e).split(' ')[0].toLowerCase() === name.toLowerCase()) || null;
+}
+async function notifyInfo(env) {
+  const names = [...new Set((await env.DB.prepare('SELECT DISTINCT asked_by FROM decisions WHERE asked_by IS NOT NULL').all()).results.map(r => r.asked_by))];
+  const people = {}; for (const n of names) people[n] = await personEmail(env, n);
+  const sent = {}; for (const r of (await env.DB.prepare('SELECT target, to_name, sent_at FROM notify_sent ORDER BY sent_at').all()).results) sent[r.target] = { to: r.to_name, at: r.sent_at };
+  return { ready: !!env.RESEND_API_KEY, people, sent };
+}
+function fieldLabel(target) {
+  const [, sec, key] = String(target).split(':');
+  const f = MODEL.sections[sec]?.find(x => x.key === key), page = MODEL.tabs.find(t => t[0] === sec)?.[1];
+  return { label: f?.label || 'your answer', page: page || '' };
+}
+async function notifyPost(request, env, user) {
+  if (!user.isOwner) return json({ error: 'Only DBY can send this.' }, 403);
+  let p; try { p = await readJson(request, 2000); } catch { return json({ error: 'Invalid.' }, 400); }
+  if (typeof p.target !== 'string' || !/^field:[\w-]+:[\w-]+$/.test(p.target)) return json({ error: 'Invalid question.' }, 400);
+  if (!env.RESEND_API_KEY) return json({ error: 'Email isn’t set up yet.', setup: true }, 409);
+  const g = (await env.DB.prepare('SELECT * FROM decisions WHERE target=? ORDER BY ord, num').bind(p.target).all()).results;
+  if (!g.length) return json({ error: 'Post your response first.' }, 400);
+  const name = g[0].asked_by, to = await personEmail(env, name);
+  if (!to) return json({ error: 'No email address found for ' + (name || 'this person') + '.' }, 400);
+  const { label, page } = fieldLabel(p.target), first = name.split(' ')[0], link = portalUrl(env) + '/#q=' + encodeURIComponent(p.target) + '&v=resp';
+  const rows = g.filter(d => d.kind !== 'ask'), asks = g.filter(d => d.kind === 'ask');
+  const waiting = rows.filter(d => d.status === 'waiting').length, open = asks.filter(d => d.status !== 'answered').length;
+  const need = [waiting ? waiting + (waiting === 1 ? ' item' : ' items') + ' to approve or reply to' : '', open ? open + (open === 1 ? ' question' : ' questions') + ' for you' : ''].filter(Boolean).join(' and ');
+  const note = typeof p.note === 'string' ? clip(p.note, 1000) : '';
+  await sendEmail(env, { to, replyTo: ownerEmails(env)[0], subject: 'Ying responded to your answer: ' + clip(label.replace(/^Event \d+ · /, ''), 70),
+    html: emailShell(`<p>Hi ${esc(first)},</p><p>I went through your answer to <strong>“${esc(label)}”</strong>${page ? ' on the ' + esc(page) + ' page' : ''} and wrote how we’ll handle each part.${need ? ' There ' + (waiting + open === 1 ? 'is ' : 'are ') + esc(need) + '.' : ''}</p>${note ? '<p>' + esc(note).replace(/\n/g, '<br>') + '</p>' : ''}`,
+      rows.map(d => esc(d.title)).concat(asks.map(d => '<em>Question:</em> ' + esc(clip(d.title, 160)))), 'Review in the planning portal', link,
+      'You can approve each line, approve them all at once, or reply. — Ying, DBY'),
+    text: `Hi ${first},\n\nI went through your answer to "${label}" and wrote how we'll handle each part.${need ? ' There ' + (waiting + open === 1 ? 'is ' : 'are ') + need + '.' : ''}\n${note ? '\n' + note + '\n' : ''}\n${rows.map(d => '- ' + d.title).concat(asks.map(d => '- Question: ' + d.title)).join('\n')}\n\nReview it here: ${link}\n\n— Ying, DBY` });
+  await env.DB.prepare('INSERT INTO notify_sent (id,target,to_name,to_email,sent_by,sent_at) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), p.target, name, to, user.email, nowIso()).run();
+  return json({ ok: true, to: name });
 }
 
 /* ---------------- Ask box (app demo): Lakeville asks how something works; Claude answers from what Lakeville may see ---------------- */
@@ -481,7 +559,8 @@ async function askPost(request, env, user) {
 async function askWant(request, env, user) {
   let p; try { p = await readJson(request, 1000); } catch { return json({ error: 'Invalid.' }, 400); }
   if (!uuid(p.id) || !['yes', 'no'].includes(p.want)) return json({ error: 'Invalid.' }, 400);
-  await env.DB.prepare('UPDATE ai_questions SET wants=? WHERE id=? AND user_email=?').bind(p.want, p.id, user.email).run();
+  const r = await env.DB.prepare('UPDATE ai_questions SET wants=? WHERE id=? AND user_email=? RETURNING question').bind(p.want, p.id, user.email).first();
+  if (r && p.want === 'yes') await queueOwner(env, user, 'asked you to consider (Ask box): ' + clip(r.question, 220), '/#tab=pro');
   return json({ ok: true });
 }
 async function aiUsage(env, user) {
@@ -541,8 +620,9 @@ async function flagsPatch(request, env, user) {
     return row ? json({ ok: true }) : json({ error: 'That flag was removed.' }, 404);
   }
   if (!uuid(p.id) || !FLAG_ANSWERS.includes(p.answer) || (p.note != null && (typeof p.note !== 'string' || p.note.length > 1000))) return json({ error: 'Invalid answer.' }, 400);
-  const row = await env.DB.prepare("UPDATE scope_flags SET answer=?, answer_note=?, answered_by=?, answered_at=? WHERE id=? AND status='live' RETURNING id")
+  const row = await env.DB.prepare("UPDATE scope_flags SET answer=?, answer_note=?, answered_by=?, answered_at=? WHERE id=? AND status='live' RETURNING id, label, section")
     .bind(p.answer, p.answer ? (p.note || '').trim() || null : null, p.answer ? user.userId : null, p.answer ? nowIso() : null, p.id).first();
+  if (row && p.answer) await queueOwner(env, user, 'answered a future-upgrade flag on ' + clip(row.label, 80) + ': ' + (p.answer === 'plan' ? 'yes, plan it' : 'not needed') + (p.note?.trim() ? ' (' + clip(p.note.trim(), 150) + ')' : ''), row.section ? '/#tab=' + row.section : '/');
   return row ? json({ ok: true }) : json({ error: 'That flag was removed.' }, 404);
 }
 async function flagsDelete(request, env, user) {
@@ -676,6 +756,7 @@ async function handle(request, env) {
     if (path === '/api/demo-status' && method === 'GET') return await demoStatus(env, user);
     if (path === '/api/ask' && method === 'POST') return await askPost(request, env, user);
     if (path === '/api/ask/want' && method === 'POST') return await askWant(request, env, user);
+    if (path === '/api/notify' && method === 'POST') return await notifyPost(request, env, user);
     if (path === '/api/ai-usage' && method === 'GET') return await aiUsage(env, user);
     if ((path === '/demo' || path === '/demo/') && method === 'GET') return page(PREVIEW_CLEAN_HTML);
     if (path === '/api/decisions') {
@@ -708,4 +789,9 @@ async function handle(request, env) {
   }
 }
 
-export default { fetch: handle };
+async function scheduled(event, env, ctx) {
+  if (!env.DB) return;
+  await ensureSchema(env.DB);
+  await flushOwnerAlerts(env).catch(e => console.error('owner alerts', e));
+}
+export default { fetch: handle, scheduled };

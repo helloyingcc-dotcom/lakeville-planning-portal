@@ -29,15 +29,20 @@ const realFetch = globalThis.fetch;
 const mockAI = (o) => { const q = JSON.parse(o.body).messages[0].content.toLowerCase(), sys = JSON.parse(o.body).system;
   const out = /check/.test(q) ? { type: 'planned', answer: 'On the Payments screen, mark the family as paid by check.', feature: 'payment', decision: '' } : /waitlist/.test(q) ? { type: 'future', answer: 'Waitlists aren’t in your current plan but could be part of a future upgrade.', feature: '', decision: '' } : { type: 'not_in_plan', answer: 'That isn’t in your plan yet. Would you like DBY to consider it?', feature: '', decision: '' };
   return new Response(JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(out) }], usage: { input_tokens: Math.round(sys.length / 4), output_tokens: 60 } })); };
-globalThis.fetch = async (url, o) => String(url).startsWith(TEAM) ? new Response(JSON.stringify({ keys: [jwk] })) : process.env.MOCK_AI && String(url).startsWith('https://api.anthropic.com/') ? mockAI(o) : realFetch(url, o);
+// Stand-in for Resend (MOCK_MAIL=1): keeps sent emails for GET /__mail.
+const mail = [];
+const mockMail = (o) => { mail.push(JSON.parse(o.body)); return new Response(JSON.stringify({ id: 'm' + mail.length })); };
+globalThis.fetch = async (url, o) => process.env.MOCK_MAIL && String(url).startsWith('https://api.resend.com/') ? mockMail(o) : String(url).startsWith(TEAM) ? new Response(JSON.stringify({ keys: [jwk] })) : process.env.MOCK_AI && String(url).startsWith('https://api.anthropic.com/') ? mockAI(o) : realFetch(url, o);
 const b64 = o => Buffer.from(typeof o === 'string' ? o : JSON.stringify(o)).toString('base64url');
 export function token(email, { aud = AUD, exp = Math.floor(Date.now() / 1000) + 3600 } = {}) {
   const head = b64({ alg: 'RS256', kid: 'k1', typ: 'JWT' }), body = b64({ email, aud: [aud], iss: TEAM, exp, iat: Math.floor(Date.now() / 1000) });
   return head + '.' + body + '.' + crypto.sign('sha256', Buffer.from(head + '.' + body), privateKey).toString('base64url');
 }
-const env = { OWNER_EMAILS: 'ying@example.com', DB, BUCKET: process.env.NO_BUCKET ? undefined : BUCKET, ACCESS_TEAM_DOMAIN: 'lakeville', ACCESS_AUD: AUD, ...(process.env.MOCK_AI ? { ANTHROPIC_API_KEY: 'test-key' } : {}) };
+const env = { OWNER_EMAILS: 'ying@example.com', DB, BUCKET: process.env.NO_BUCKET ? undefined : BUCKET, ACCESS_TEAM_DOMAIN: 'lakeville', ACCESS_AUD: AUD, ...(process.env.MOCK_AI ? { ANTHROPIC_API_KEY: 'test-key' } : {}), ...(process.env.MOCK_MAIL ? { RESEND_API_KEY: 'test-mail', NOTIFY_QUIET: '0' } : {}) };
 http.createServer(async (req, res) => {
   const url = 'http://localhost:' + port + req.url;
+  if (req.url === '/__mail') { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify(mail)); }
+  if (req.url === '/__cron') { await worker.scheduled({}, env, {}); res.writeHead(200); return res.end('ok'); }
   const hasBody = !['GET', 'HEAD'].includes(req.method);
   const request = new Request(url, { method: req.method, headers: req.headers, body: hasBody ? Readable.toWeb(req) : undefined, duplex: 'half' });
   const r = await worker.fetch(request, env, {});

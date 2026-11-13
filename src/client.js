@@ -989,7 +989,7 @@ async function flagCall(fn) {
 
 /* ---------- DBY's response inside each question: a chart Lakeville approves row by row ---------- */
 // Each question box gets tabs: [<name>'s answer] [DBY's response] [DBY asks]. Rows ('row') get Approve / Respond; questions ('ask') get typed answers.
-const D = { list: null, last: '', view: {}, compose: null, busy: false, error: '', open: {}, drafts: {} };
+const D = { list: null, last: '', view: {}, compose: null, busy: false, error: '', open: {}, drafts: {}, notify: null, notifyState: {} };
 const SCREENS = [['', 'No preview'], ['desk', 'Check-in desk'], ['pay', 'Payments'], ['regs', 'Registrations'], ['dash', 'Dashboard'], ['form', 'Sign-up form'], ['vols', 'Volunteers'], ['mail', 'Email families'], ['import', 'Import a spreadsheet'], ['review', 'Pre-event review'], ['reports', 'Reports & export'], ['emails', 'Automated emails'], ['parent:events', 'Parent’s phone: events & sign-up'], ['parent:tickets', 'Parent’s phone: my tickets']];
 const PLAN_SHORT = { essentials: 'Your plan', upgrade: 'Future upgrade' };
 const decList = () => D.list || [];
@@ -1003,7 +1003,7 @@ function decAttention() { const f = S.me?.isOwner ? ownerNeeds : lakeNeeds; retu
 function targets() { return [...new Set(decList().map(d => d.target).filter(Boolean))]; }
 async function pollDecisions() {
   if (document.hidden && D.list !== null) return;
-  try { const r = await api('/api/decisions'), snap = JSON.stringify(r.decisions); if (snap === D.last) return; D.last = snap; D.list = r.decisions; }
+  try { const r = await api('/api/decisions'), snap = JSON.stringify([r.decisions, r.notify]); if (snap === D.last) return; D.last = snap; D.list = r.decisions; D.notify = r.notify || null; }
   catch { if (D.list === null) D.list = []; return; }
   renderNav(); renderDecZones();
   const b = $('dec-banner'); if (b) b.replaceWith(decBanner());
@@ -1019,6 +1019,8 @@ function goQuestion(target, view) {
   setTimeout(() => { const el = $(fieldId(sec, key))?.closest('.field'); if (el) { el.scrollIntoView({ block: 'start' }); el.classList.add('pulse'); } }, 80);
 }
 function openFromHash(tries = 0) {   // links from the app demo: /#q=field:<section>:<key>&v=resp|ask
+  const t = /^#tab=(\w+)$/.exec(window.location.hash);
+  if (t) { if (!S.me && tries < 40) return setTimeout(() => openFromHash(tries + 1), 250); history.replaceState(null, '', window.location.pathname + window.location.search); if (tabs.some(x => x[0] === t[1])) setTab(t[1]); return; }
   const m = /[#&]q=([^&]+)(?:&v=(\w+))?/.exec(window.location.hash); if (!m) return;
   if ((!S.loaded || D.list === null || !S.me) && tries < 40) { if (D.list === null) pollDecisions(); return setTimeout(() => openFromHash(tries + 1), 250); }
   const target = decodeURIComponent(m[1]); history.replaceState(null, '', window.location.pathname + window.location.search);
@@ -1049,7 +1051,34 @@ function decZone(target) {
       tab('answer', (who === S.me?.name ? 'Your' : who + '’s') + ' answer'),
       tab('resp', 'DBY’s response', rows.length ? ok + '/' + rows.length + ' ✓' : composing ? 'draft' : null),
       asks.length ? tab('ask', 'DBY asks', asks.filter(a => a.status !== 'answered').length || '✓') : null),
-    view === 'resp' ? (composing ? decComposer(target) : responsePanel(target, rows)) : view === 'ask' ? asksPanel(target, asks) : null];
+    view === 'resp' ? (composing ? decComposer(target) : responsePanel(target, rows)) : view === 'ask' ? asksPanel(target, asks) : null,
+    owner && !composing && view !== 'answer' ? notifyBox(target, rows, asks) : null];
+}
+/* owner: let the person who answered know the response is ready (email via the portal, or her own email / text app) */
+function notifyMessage(target, rows, asks, first) {
+  const label = (allFields(target)?.label || 'your answer'), waiting = rows.filter(r => r.status === 'waiting').length, open = asks.filter(a => a.status !== 'answered').length;
+  const need = [waiting ? waiting + (waiting === 1 ? ' item' : ' items') + ' to approve or reply to' : '', open ? open + (open === 1 ? ' question' : ' questions') + ' for you' : ''].filter(Boolean).join(' and ');
+  return `Hi ${first}! I went through your answer to "${label}" on the planning portal and wrote how we'll handle each part.${need ? ' There ' + (waiting + open === 1 ? 'is ' : 'are ') + need + '.' : ''} You can approve each line, approve them all at once, or reply. Here's the link: ${window.location.origin}/#q=${encodeURIComponent(target)}&v=resp\n\nThanks! – Ying`;
+}
+function allFields(target) { const [, sec, key] = target.split(':'); return (sections[sec] || []).find(f => f.key === key); }
+function notifyBox(target, rows, asks) {
+  const g = rows[0] || asks[0], name = g?.asked_by; if (!name) return null;
+  const first = name.split(' ')[0], N = D.notify || {}, email = N.people?.[name], sent = N.sent?.[target], msg = notifyMessage(target, rows, asks, first);
+  const subject = 'Ying responded to your answer on the planning portal';
+  const st = D.notifyState[target] || '';
+  const emailBtn = N.ready && email
+    ? h('button', { type: 'button', class: 'primary', disabled: st === 'sending', onclick: async () => {
+        D.notifyState[target] = 'sending'; renderDecZones();
+        try { await api('/api/notify', jsonOpts('POST', { target })); D.notifyState[target] = 'sent'; } catch (e) { D.notifyState[target] = 'error:' + errMsg(e, 'Could not send the email.'); }
+        D.last = ''; await pollDecisions(); renderDecZones(); } }, st === 'sending' ? 'Sending…' : sent ? '✉ Email ' + first + ' again' : '✉ Email ' + first)
+    : h('a', { class: 'btnlike primary', href: 'mailto:' + (email || '') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(msg) }, '✉ Email ' + first);
+  return h('div', { class: 'notify-box' },
+    h('div', { class: 'notify-head' }, h('strong', null, '📣 Let ' + first + ' know'), sent ? h('span', { class: 'notify-sent' }, '✓ Emailed ' + sent.to.split(' ')[0] + ' · ' + fmtTime(sent.at)) : h('small', { class: 'muted' }, 'When your response is finished, tell ' + first + ' it’s ready to review.')),
+    h('div', { class: 'dactions' }, emailBtn,
+      h('a', { class: 'btnlike', href: 'sms:&body=' + encodeURIComponent(msg) }, '💬 Text ' + first),
+      h('button', { type: 'button', class: 'quiet', onclick: async e => { try { await navigator.clipboard.writeText(msg); e.target.textContent = 'Copied ✓'; } catch { e.target.textContent = 'Couldn’t copy'; } } }, 'Copy message')),
+    !N.ready ? h('small', { class: 'muted' }, 'Email opens your own email app for now. Once portal email is set up, this button sends it for you.') : !email ? h('small', { class: 'muted' }, 'No email address on file for ' + name + ', so this opens your email app.') : null,
+    st.startsWith('error:') ? h('p', { class: 'error', role: 'alert' }, st.slice(6)) : null);
 }
 function decSend(d, action, extra) {
   return decCall(() => api('/api/decisions', jsonOpts('POST', { id: d.id, action, note: D.drafts[d.id] || '', version: d.version, ...extra })), () => { D.open[d.id] = null; D.drafts[d.id] = ''; });

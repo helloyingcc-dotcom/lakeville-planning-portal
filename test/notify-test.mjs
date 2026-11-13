@@ -1,0 +1,51 @@
+// Run with: MOCK_MAIL=1 node test/harness.mjs > /tmp/harness.log &  then node test/notify-test.mjs
+import { readFileSync } from 'node:fs';
+const T = JSON.parse(readFileSync('/tmp/harness.log', 'utf8').split('TOKENS ')[1]);
+const B = 'http://localhost:8787', O = { Origin: B };
+let pass = 0, fail = 0;
+const ok = (c, m) => { if (c) pass++; else { fail++; console.log('FAIL', m); } };
+const call = async (who, path, opts = {}) => { const r = await fetch(B + path, { ...opts, headers: { 'Cf-Access-Jwt-Assertion': T[who], ...(opts.method && opts.method !== 'GET' ? O : {}), 'Content-Type': 'application/json', ...opts.headers } }); let j = null; try { j = await r.clone().json(); } catch {} return { s: r.status, j }; };
+const J = (method, body) => ({ method, body: JSON.stringify(body) });
+const id = () => crypto.randomUUID();
+const mail = async () => (await fetch(B + '/__mail')).json();
+
+await call('jessie', '/api/me', J('PUT', { name: 'Jessie' }));
+const target = 'field:start:improve';
+const r1 = id(), r2 = id(), a1 = id();
+ok((await call('ying', '/api/decisions', J('POST', { id: r1, title: 'Fewer volunteers at the door', answer: 'QR check-in', askedBy: 'Jessie', target, plan: 'essentials', ord: 1 }))).j?.ok, 'post row 1');
+await call('ying', '/api/decisions', J('POST', { id: r2, title: 'Cash at the door', answer: 'Record it', askedBy: 'Jessie', target, plan: 'essentials', ord: 2 }));
+await call('ying', '/api/decisions', J('POST', { id: a1, kind: 'ask', title: 'Do you use Zelle?', askedBy: 'Jessie', target, ord: 3 }));
+let g = await call('ying', '/api/decisions');
+ok(g.j.notify?.ready === true && g.j.notify.people.Jessie === 'jessie.smith@example.com', 'owner sees notify info ' + JSON.stringify(g.j.notify));
+ok(!(await call('jessie', '/api/decisions')).j.notify, 'Lakeville does not get notify info');
+ok((await call('jessie', '/api/notify', J('POST', { target }))).s === 403, 'Lakeville cannot send');
+ok((await call('ying', '/api/notify', J('POST', { target: 'field:start:nothing' }))).s === 400, 'no response → refused');
+const s = await call('ying', '/api/notify', J('POST', { target }));
+ok(s.j?.ok && s.j.to === 'Jessie', 'sent ' + JSON.stringify(s.j));
+let m = await mail();
+ok(m.length === 1 && m[0].to[0] === 'jessie.smith@example.com' && m[0].reply_to === 'ying@example.com', 'email to Jessie, reply to Ying');
+ok(/2 items to approve or reply to and 1 question for you/.test(m[0].text) && m[0].text.includes('/#q=' + encodeURIComponent(target) + '&v=resp'), 'body counts + deep link');
+ok(!/\bPro\b|\$\d/.test(m[0].html + m[0].text + m[0].subject), 'no Pro or prices');
+g = await call('ying', '/api/decisions');
+ok(g.j.notify.sent[target]?.to === 'Jessie', 'sent recorded');
+
+// owner alerts: Lakeville activity is grouped into one email by the cron
+const ver = g.j.decisions.find(d => d.id === r1).version;
+await call('jessie', '/api/decisions', J('POST', { id: r1, action: 'approve', version: ver }));
+await call('jessie', '/api/decisions', J('POST', { id: r2, action: 'changes', note: 'We also take checks', version: 1 }));
+await call('jessie', '/api/decisions', J('POST', { id: a1, action: 'answer', note: 'Yes, Zelle' }));
+await call('ying', '/api/decisions', J('POST', { id: r2, action: 'reply', note: 'Got it' }));
+await fetch(B + '/__cron');
+m = await mail();
+ok(m.length === 2 && m[1].to[0] === 'ying@example.com', 'one alert to Ying');
+ok(/3 updates/.test(m[1].subject) && /approved “Fewer volunteers/.test(m[1].text) && /responded to “Cash at the door”: We also take checks/.test(m[1].text) && /answered/.test(m[1].text) && !/Got it/.test(m[1].text), 'alert lists Lakeville actions only: ' + m[1].subject);
+await fetch(B + '/__cron');
+ok((await mail()).length === 2, 'nothing new → no email');
+await call('jimmy', '/api/comments', J('POST', { requestId: id(), section: 'workflow', quote: '', body: 'Can volunteers see payments?' }));
+await fetch(B + '/__cron');
+m = await mail();
+ok(m.length === 3 && /Jimmy/.test(m[2].subject) && m[2].text.includes('/#tab=workflow'), 'question for DBY alert ' + m[2]?.subject);
+await call('ying', '/api/comments', J('POST', { requestId: id(), section: 'workflow', quote: '', body: 'owner note' }));
+await fetch(B + '/__cron');
+ok((await mail()).length === 3, 'Ying’s own activity → no alert');
+console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
