@@ -305,3 +305,7 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .dec-tags{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .see-it{font-size:12px;font-weight:600;color:#2d4fa3;text-decoration:none}
 .dec-edsel{display:grid;gap:6px}
+
+.ai-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
+.ai-stats div{border:1px solid #dde3ef;border-radius:10px;padding:10px 12px;display:grid;background:#fff}.ai-stats strong{font-size:20px;color:#1f2f57}.ai-stats small{color:#6b7383}
+.ai-list{list-style:none;padding:0;margin:6px 0 12px;display:grid;gap:6px}.ai-list li{font-size:13.5px;border:1px solid #eef1f6;border-radius:8px;padding:8px 10px;display:grid;background:#fff}.ai-list li small{color:#6b7383}.ai-list li.want{border-color:#f3c99a;background:#fff8f0}

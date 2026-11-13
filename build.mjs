@@ -10,7 +10,7 @@ const html = r('./src/page.html')
 const preview = r('./src/preview.html').replace('__LION_DATA__', () => lion);
 // Lakeville-safe copy: Pro-only parts (between /*PRO*/ and /*ORP*/) removed, always single-screen.
 const previewClean = preview.replace(/\/\*PRO\*\/[\s\S]*?\/\*ORP\*\//g, '').replace('const CLEAN = false', 'const CLEAN = true');
-if (/\bPro\b|\$249|\$499|upgrade/i.test(previewClean.replace(/<img[^>]+>/g, '').replace(/LION = '[^']*'/, ''))) throw new Error('clean preview still mentions Pro / prices');
+if (/\bPro\b|\$249|\$499|(?<!future )upgrade/i.test(previewClean.replace(/<img[^>]+>/g, '').replace(/LION = '[^']*'/, ''))) throw new Error('clean preview still mentions Pro / prices');
 const worker = r('./src/server.js')
   .replace('/*__MODEL__*/', () => model)
   .replace('/*__HTML__*/""', () => JSON.stringify(html))

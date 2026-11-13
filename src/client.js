@@ -295,6 +295,7 @@ function tabBody(tab) {
     return [
       h('div', { class: 'owner-note' }, '🔒 Only you can see this page. Jessie and Jimmy never see the Pro tier, its fields or your notes.'),
       h('section', { class: 'panel', id: 'presence' }, presenceView()),
+      h('section', { class: 'panel', id: 'ai-usage' }, aiUsageView()),
       h('div', { class: 'tier-head' }, h('div', null, h('span', { class: 'eyebrow' }, 'HIGHER TIER · NOT BUILT'), h('h2', null, TIERS.pro.name), h('p', null, 'Mark how strongly Lakeville’s answers point to each feature. Strong signals across enough features make the case for building Pro.')), h('span', { class: 'tier-price pro' }, TIERS.pro.price)),
       h('div', { class: 'prioritykey' }, [['Strong signal', 'They clearly asked for it'], ['Some signal', 'Hinted at it'], ['No signal yet', 'Not mentioned']].map(([a, b]) => h('span', null, h('strong', null, a), ' ' + b))),
       h('div', { class: 'featurelist' }, pro.map(([id, title, desc]) => h('section', { class: 'feature tier-pro' },
@@ -1202,6 +1203,24 @@ function presenceView() {
       h('span', { class: 'presence-when' }, x.online ? h('strong', { class: 'presence-online' }, 'Online now') : 'Last here ' + ago(x.lastSeen),
         h('small', null, 'First signed in ' + fmtTime(x.firstSeen) + ' · ' + x.visits + (x.visits === 1 ? ' visit' : ' visits'))))))];
 }
+const AIU = { data: null };
+const usd = n => '$' + (n < 1 ? n.toFixed(3) : n.toFixed(2));
+function aiUsageView() {
+  const d = AIU.data;
+  if (!d) return [h('h2', null, 'Ask box & AI spend'), h('p', { class: 'muted' }, 'Loading…')];
+  const month = new Date().toISOString().slice(0, 7), m = d.months.find(x => x.month === month) || { questions: 0, cost: 0 };
+  const wants = d.recent.filter(r => r.wants === 'yes');
+  return [h('h2', null, 'Ask box & AI spend'),
+    h('p', { class: 'muted' }, d.enabled ? `On · ${d.model} · $${d.rates[0]} per million tokens in, $${d.rates[1]} out · limit ${d.dailyLimit} questions per person per day. Exact costs are also logged daily in your sheet’s “AI usage” tab.` : 'Off. Add your Anthropic API key in Cloudflare (secret ANTHROPIC_API_KEY) to turn on the Ask box in the app demo.'),
+    h('div', { class: 'ai-stats' }, h('div', null, h('strong', null, usd(m.cost)), h('small', null, 'This month · ' + m.questions + ' questions')), h('div', null, h('strong', null, usd(d.total.cost)), h('small', null, 'All time · ' + d.total.questions + ' questions')), h('div', null, h('strong', null, d.total.questions ? usd(d.total.cost / d.total.questions) : '–'), h('small', null, 'Average per question'))),
+    wants.length ? [h('h3', null, 'Lakeville asked for these (not in their plan)'), h('ul', { class: 'ai-list' }, wants.map(r => h('li', { class: 'want' }, h('strong', null, r.user_name + ': '), r.question, h('small', null, fmtTime(r.created_at)))))] : null,
+    d.recent.length ? [h('h3', null, 'Recent questions'), h('ul', { class: 'ai-list' }, d.recent.slice(0, 12).map(r => h('li', null, h('strong', null, r.user_name + ': '), r.question, h('small', null, ({ planned: 'In plan', depends: 'Depends', future: 'Future upgrade', not_in_plan: 'Not in plan', unclear: 'Unclear' }[r.type] || r.type) + ' · ' + usd(r.cost) + ' · ' + fmtTime(r.created_at)))))] : null];
+}
+async function pollAiUsage() {
+  if (!S.me?.isOwner || document.hidden) return;
+  try { AIU.data = await api('/api/ai-usage'); } catch { return; }
+  const el = $('ai-usage'); if (el) fill(el, aiUsageView());
+}
 async function pollPresence() {
   if (!S.me?.isOwner || document.hidden) return;
   try { const p = await api('/api/presence'), snap = JSON.stringify(p.people); if (snap !== P.last) { P.last = snap; P.people = p.people; } } catch { if (P.people === null) P.people = []; }
@@ -1215,7 +1234,7 @@ window.addEventListener('beforeunload', e => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { pollFlags(); pollDecisions(); syncPlan(); pollList(); pollThread(); pollTeam(); } });
 let flagTick = 0;
-setInterval(() => { syncPlan(); pollList(); pollThread(); if (++flagTick % 3 === 0) { pollFlags(); pollDecisions(); } if (flagTick % 10 === 1) pollPresence(); if (S.commentsOpen && S.panelView === 'team') pollTeam(); }, 2000);
+setInterval(() => { syncPlan(); pollList(); pollThread(); if (++flagTick % 3 === 0) { pollFlags(); pollDecisions(); } if (flagTick % 10 === 1) { pollPresence(); pollAiUsage(); } if (S.commentsOpen && S.panelView === 'team') pollTeam(); }, 2000);
 renderShell();
 api('/api/me').then(me => { S.me = me; tabs = me.isOwner ? allTabs : allTabs.filter(t => !ownerOnly(t[0])); renderNav(); renderMain(); renderPanel(); pollTeam(); }).catch(e => { S.error = errMsg(e, 'Could not check your sign-in.'); renderMain(); });
 load();

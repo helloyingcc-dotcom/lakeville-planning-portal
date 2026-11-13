@@ -129,6 +129,10 @@ body.single .side{width:auto}
 .demo-item.mine{background:#fffbea;margin:0 -6px;padding:6px;border-radius:8px;border-top:0}
 .demo-item a{color:#2d4fa3;font-weight:600;text-decoration:none}
 .demo-other{font-size:12px;color:#6b7383;margin:6px 0 0}
+.demo-ask{display:grid;gap:6px;border:1px solid #d7dcea;border-radius:12px;padding:12px;background:#f8faff}
+.demo-ask label{font-size:13px}.demo-askrow{display:flex;gap:6px}.demo-askrow input{flex:1;font:inherit;font-size:14px;border:1px solid #cfd6e4;border-radius:8px;padding:8px 10px}
+.demo-ans{display:grid;gap:6px;background:#fff;border:1px solid #e3e7f0;border-radius:10px;padding:10px}.demo-ans p{margin:0;font-size:13.5px}.demo-ans .demo-chip{justify-self:start}
+.demo-ansact{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.demo-ansact a{text-decoration:none}.demo-err{margin:0;color:#b42318;font-size:13px}
 .demo-about{margin:0;font-size:12.5px;color:#4b3b0f;background:#fff8e6;border:1px solid #f1dfb2;border-radius:10px;padding:10px 12px}
 @media(max-width:700px){.demo-panel{width:100%}}
 </style>
@@ -703,7 +707,7 @@ if (SCREEN) {   // lock to one screen: hide the menu and the PTA/Parent switch
 render();
 /* ---------- app demo (/demo): live plan status beside each screen ---------- */
 const DEMO = location.pathname.replace(/\/$/, '') === '/demo';
-const DM = { open: false, data: null };
+const DM = { open: false, data: null, q: '', busy: false, res: null, err: '' };
 const screenKey = () => S.mode === 'parent' ? 'parent:' + S.pv : S.view;
 const SCREEN_NAMES = Object.fromEntries([...NAV.map(n => [n[0], n[2]]), ['parent:events', 'Parent · Events'], ['parent:tickets', 'Parent · My tickets']]);
 function goHash() {
@@ -723,15 +727,36 @@ function featStatus(items) {
 const mineIt = it => DM.data && it.asked_by && it.asked_by === DM.data.me.name;
 const needsMe = it => mineIt(it) && (it.kind === 'ask' ? it.status !== 'answered' : it.status === 'waiting');
 const qLink = it => '/#q=' + encodeURIComponent(it.target) + '&v=' + (it.kind === 'ask' ? 'ask' : 'resp');
+const ASK_LABEL = { planned: ['approved', 'In your plan'], depends: ['ask', 'Depends on your answer'], future: ['changes', 'Future upgrade idea'], not_in_plan: ['planned', 'Not in your plan yet'], unclear: ['planned', 'Not sure'] };
+function askBox() {
+  if (!DM.data.askEnabled) return '';
+  const r = DM.res, [c, l] = r ? ASK_LABEL[r.type] || ASK_LABEL.unclear : [];
+  return `<form class="demo-ask" data-ask><label for="demo-q"><b>Ask how something works</b></label>
+    <div class="demo-askrow"><input id="demo-q" maxlength="500" placeholder="e.g. How do we record a check payment?" value="${esc(DM.q)}" autocomplete="off"><button class="btn sm" ${DM.busy ? 'disabled' : ''}>${DM.busy ? '…' : 'Ask'}</button></div>
+    ${DM.err ? `<p class="demo-err" role="alert">${esc(DM.err)}</p>` : ''}
+    ${r ? `<div class="demo-ans" role="status"><span class="demo-chip c-${c}">${l}</span><p>${esc(r.answer)}</p><div class="demo-ansact">
+      ${r.screen ? `<button type="button" class="btn ghost sm" data-act="demo-show" data-v="${esc(r.screen)}">Show me</button>` : ''}
+      ${r.target ? `<a class="btn ghost sm" href="/#q=${encodeURIComponent(r.target)}&v=${r.view}" target="_blank" rel="noreferrer">Go to question</a>` : ''}
+      ${r.type === 'not_in_plan' && !r.want ? `<button type="button" class="btn sm" data-act="demo-want" data-v="yes">Yes, I’d like this</button><button type="button" class="btn ghost sm" data-act="demo-want" data-v="no">No thanks</button>` : ''}
+      ${r.want === 'yes' ? '<small>Thanks! DBY will look at it.</small>' : ''}</div><small class="muted">AI answer from your plan. Double-check anything important with DBY.</small></div>` : ''}</form>`;
+}
+async function askSend(q) {
+  DM.busy = true; DM.err = ''; DM.res = null; renderDemo();
+  try { const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, screen: screenKey() }) }), d = await r.json();
+    if (!r.ok) DM.err = d.error || 'Something went wrong. Please try again.'; else DM.res = d; }
+  catch { DM.err = 'Couldn’t reach the Ask box. Please try again.'; }
+  DM.busy = false; renderDemo();
+}
 function renderDemo() {
   if (!DEMO || !DM.data) return;
+  if (document.activeElement?.id === 'demo-q' && !DM.busy && DM.open && $('#demo-q')) return;   // don't redraw while typing
   const key = screenKey(), feats = DM.data.features.filter(f => f.screens.includes(key));
   const forMe = DM.data.items.filter(needsMe).length;
   const itemsOf = f => DM.data.items.filter(i => i.feature === f.id).sort((a, b) => mineIt(b) - mineIt(a));
   const who = it => mineIt(it) ? 'For you' : it.asked_by ? 'For ' + it.asked_by : 'For the Lakeville team';
-  $('#demo-ui').innerHTML = !DM.open ? `<button class="demo-toggle" data-act="demo-open" aria-label="What’s on this screen">📋 What’s on this screen${forMe ? ` <span class="n">${forMe} for you</span>` : ''}</button>` :
+  $('#demo-ui').innerHTML = !DM.open ? `<button class="demo-toggle" data-act="demo-open" aria-label="What’s on this screen">📋 What’s on this screen${DM.data.askEnabled ? ' · Ask' : ''}${forMe ? ` <span class="n">${forMe} for you</span>` : ''}</button>` :
     `<aside class="demo-panel" aria-label="What’s on this screen"><header><div><h2>What’s on this screen</h2><p>${esc(SCREEN_NAMES[key] || '')} · what’s planned for Lakeville and where each item stands</p></div><button class="btn ghost sm" data-act="demo-close">Close</button></header>
-    <div class="demo-list"><p class="demo-about"><b>What this demo is for:</b> working out the flow together: what happens in what order, who does what, and what each screen needs. The real app is built from these screens, so it will look like this, with Lakeville’s logo and colors. Wording and small details may still change as we go.</p>${feats.length ? feats.map(f => { const its = itemsOf(f), [c, label] = featStatus(its);
+    <div class="demo-list">${askBox()}<p class="demo-about"><b>What this demo is for:</b> working out the flow together: what happens in what order, who does what, and what each screen needs. The real app is built from these screens, so it will look like this, with Lakeville’s logo and colors. Wording and small details may still change as we go.</p>${feats.length ? feats.map(f => { const its = itemsOf(f), [c, label] = featStatus(its);
       return `<div class="demo-feat"><h3>${esc(f.name)} <span class="demo-chip c-${c}">${label}</span></h3><p>${esc(f.desc)}</p>
       ${its.map(it => { const [ic, il] = itemStatus(it); return `<div class="demo-item${mineIt(it) ? ' mine' : ''}"><span><b>${esc(who(it))}</b> · ${esc(it.title)}</span><span><span class="demo-chip c-${ic}">${il}${it.status === 'approved' && it.status_by ? ' by ' + esc(it.status_by) : ''}</span> ${it.target ? `<a href="${qLink(it)}" target="_blank" rel="noreferrer">Go to question →</a>` : ''}</span></div>`; }).join('')}</div>`; }).join('')
       : '<p class="muted">This screen supports the features on the other screens. Use the menu to look around.</p>'}
@@ -743,7 +768,13 @@ if (DEMO) {
   document.querySelector('.proto-bar strong').textContent = 'App demo';
   document.querySelector('.proto-bar .hide-sm').textContent = '· sample data, nothing is saved · this is the desktop preview: on phones and tablets the same screens rearrange to fit';
   const r0 = render; render = function () { r0(); renderDemo(); };
-  document.addEventListener('click', e => { const t = e.target.closest('[data-act="demo-open"],[data-act="demo-close"]'); if (t) { DM.open = t.dataset.act === 'demo-open'; renderDemo(); } });
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-act="demo-open"],[data-act="demo-close"],[data-act="demo-show"],[data-act="demo-want"]'); if (!t) return;
+    if (t.dataset.act === 'demo-show') { location.hash = 'screen=' + t.dataset.v; return; }
+    if (t.dataset.act === 'demo-want') { DM.res.want = t.dataset.v; fetch('/api/ask/want', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: DM.res.id, want: t.dataset.v }) }); renderDemo(); return; }
+    DM.open = t.dataset.act === 'demo-open'; renderDemo(); });
+  document.addEventListener('input', e => { if (e.target.id === 'demo-q') DM.q = e.target.value; });
+  document.addEventListener('submit', e => { if (!e.target.matches('[data-ask]')) return; e.preventDefault(); const q = DM.q.trim(); if (q.length >= 3 && !DM.busy) askSend(q); });
   addEventListener('hashchange', goHash); goHash(); loadDemo(); setInterval(() => { if (!document.hidden) loadDemo(); }, 20000);
 }
 </script>

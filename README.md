@@ -44,3 +44,5 @@ The portal was first built on ChatGPT Sites (Nov 2026). It was rebuilt here as a
 
 - `test/decisions-test.py`: Decisions — DBY answers with a clean one-screen preview, Lakeville gets a banner/badge, asks, approves; editing an answer sends it back for approval.
 - `test/label-test.py`: names inside answer boxes.
+- `test/ask-test.py`: Ask box with a stand-in AI (start the harness with `MOCK_AI=1`).
+- `test/demo-test.py`: app demo panel, "For you", links between demo and portal.
