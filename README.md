@@ -41,3 +41,6 @@ Answers, comments and names live in the D1 database (`lakeville-planning`), not 
 ## History
 
 The portal was first built on ChatGPT Sites (Nov 2026). It was rebuilt here as a standalone Worker so it can be updated by any tool at any time.
+
+- `test/decisions-test.py`: Decisions — DBY answers with a clean one-screen preview, Lakeville gets a banner/badge, asks, approves; editing an answer sends it back for approval.
+- `test/label-test.py`: names inside answer boxes.

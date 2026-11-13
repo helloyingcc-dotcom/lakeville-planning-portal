@@ -1,5 +1,5 @@
 const MODEL=(()=>{
-const tabs=[['start','Start here'],['events','Current events'],['workflow','Workflow & roles'],['features','Feature priorities'],['questions','Questions & accounting'],['ahead','Looking ahead'],['preview','App preview'],['pro','Pro tier planning']];
+const tabs=[['start','Start here'],['decisions','Decisions'],['events','Current events'],['workflow','Workflow & roles'],['features','Feature priorities'],['questions','Questions & accounting'],['ahead','Looking ahead'],['preview','App preview'],['pro','Pro tier planning']];
 // Sections only the portal owner (OWNER_EMAILS) can see or change.
 const OWNER_SECTIONS=['preview','pro'];
 // Tier names and prices: change them here only.
@@ -105,6 +105,7 @@ const SIGNAL=['Strong signal','Some signal','No signal yet'];
 const f=(key,label,hint)=>({key,label,hint});
 const steps=['Plan the event','Review and publish','Invite families','Register and pay if needed','Fill volunteer shifts','Prepare and remind','Run the event and check in','Close, report and reuse'];
 const sections={
+decisions:[],
 start:[f('completedBy','Who is contributing?','Names or PTA roles are enough.'),f('goal','What is the main improvement you want?')],
 events:[...Array.from({length:MAX_EVENTS},(_,i)=>[f(`event${i}Name`,`Event ${i+1} · Event name`),f(`event${i}Team`,`Event ${i+1} · Who runs it?`,'Team lead or contact for this event.'),f(`event${i}Process`,`Event ${i+1} · How do you run it today?`,'Sign-ups, payments, tickets, check-in and communication.'),f(`event${i}Pain`,`Event ${i+1} · What is the hardest part?`),f(`event${i}Better`,`Event ${i+1} · What would make it easier?`),{key:`event${i}Order`,label:`Event ${i+1} · Which event should we set up in the app first?`,hint:'We’ll build the app around your first event, then add the others.',options:EVENT_ORDER}]).flat(),f('tools','Tools Lakeville actually uses','Include what each tool does and whether you want to keep it.'),f('moreEvents','Anything else about your events?')],
 features:[...features.filter(x=>x[3]==='base').flatMap(([id,name])=>[{key:id+'Priority',label:name+' (priority)',options:PRIORITY},f(id+'Notes',name+' notes')]),f('additional','Anything else you would like?','Tell us about anything else you need. We’ll review requests outside your plan separately.')],

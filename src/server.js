@@ -14,6 +14,7 @@
 
 const HTML = /*__HTML__*/"";
 const PREVIEW_HTML = /*__PREVIEW__*/"";
+const PREVIEW_CLEAN_HTML = /*__PREVIEW_CLEAN__*/""; // one screen, Pro parts removed: what Lakeville sees in a decision
 const VERSION = /*__VERSION__*/"dev";
 
 const json = (v, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -29,6 +30,8 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS comment_threads (seq INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, id TEXT NOT NULL UNIQUE, section TEXT NOT NULL, field_key TEXT, quote TEXT NOT NULL, resolved INTEGER DEFAULT 0 NOT NULL, revision INTEGER DEFAULT 1 NOT NULL, created_by TEXT NOT NULL, created_name TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS comment_messages (seq INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, request_id TEXT NOT NULL UNIQUE, thread_id TEXT NOT NULL REFERENCES comment_threads(id), author_id TEXT NOT NULL, author_name TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL, edited_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS comment_attachments (id TEXT PRIMARY KEY NOT NULL, object_key TEXT NOT NULL, author_id TEXT NOT NULL, name TEXT NOT NULL, content_type TEXT NOT NULL, size INTEGER NOT NULL, created_at TEXT NOT NULL, message_id TEXT REFERENCES comment_messages(request_id))`,
+  `CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY NOT NULL, num INTEGER NOT NULL UNIQUE, title TEXT NOT NULL, question TEXT NOT NULL, asked_by TEXT, target TEXT, answer TEXT NOT NULL, plan TEXT DEFAULT '' NOT NULL, preview TEXT DEFAULT '' NOT NULL, status TEXT DEFAULT 'waiting' NOT NULL, status_by TEXT, status_at TEXT, version INTEGER DEFAULT 1 NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS decision_log (id TEXT PRIMARY KEY NOT NULL, decision_id TEXT NOT NULL, kind TEXT NOT NULL, author_id TEXT NOT NULL, author_name TEXT NOT NULL, body TEXT, version INTEGER NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS presence (email TEXT PRIMARY KEY NOT NULL, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL, visits INTEGER DEFAULT 1 NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS people (email TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS comment_messages_thread ON comment_messages(thread_id, seq)`,
@@ -347,6 +350,65 @@ async function answerFileDelete(request, env, user) {
 const TEAM_PAGE = 300, MAX_TOPICS = 40;
 /* ---------- "beyond Essentials" flags: DBY flags an ask, Lakeville says whether to plan it for a future upgrade ---------- */
 const FLAG_ANSWERS = ['', 'plan', 'skip'];
+/* ---------------- decisions: DBY answers a Lakeville question, Lakeville approves ---------------- */
+// status: waiting (needs Lakeville's OK) · approved · changes (Lakeville asked for changes). Editing the answer sends it back to waiting.
+// log kinds: posted · revised · approve · changes · question (Lakeville asks) · reply (DBY replies).
+const DEC_PLANS = ['', 'essentials', 'upgrade'];
+const DEC_SCREENS = ['', 'dash', 'form', 'vols', 'mail', 'import', 'regs', 'desk', 'pay', 'review', 'reports', 'emails', 'parent:events', 'parent:tickets'];
+async function decisionsGet(env, user) {
+  const d = await env.DB.prepare('SELECT * FROM decisions ORDER BY num').all();
+  const log = await env.DB.prepare(`SELECT l.id, l.decision_id, l.kind, ${NAME('l', 'author_id', 'author_name')} AS author_name, l.body, l.version, l.created_at FROM decision_log l ORDER BY l.created_at`).all();
+  const by = {}; for (const l of log.results) (by[l.decision_id] ||= []).push(l);
+  return json({ decisions: d.results.map(x => ({ ...x, log: by[x.id] || [] })) });
+}
+function decisionInput(p) {
+  const str = (v, max, req) => typeof v === 'string' && v.length <= max && (!req || v.trim());
+  if (!str(p.title, 200, true) || !str(p.question, 4000, true) || !str(p.answer, 8000, true) || (p.askedBy != null && !str(p.askedBy, 200)) || (p.target != null && !str(p.target, 200)) || !DEC_PLANS.includes(p.plan ?? '') || !DEC_SCREENS.includes(p.preview ?? '')) return null;
+  return { title: p.title.trim(), question: p.question.trim(), answer: p.answer.trim(), askedBy: (p.askedBy || '').trim() || null, target: (p.target || '').trim() || null, plan: p.plan || '', preview: p.preview || '' };
+}
+const decLog = (env, id, kind, user, body, version) => env.DB.prepare('INSERT INTO decision_log (id,decision_id,kind,author_id,author_name,body,version,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), id, kind, user.userId, user.displayName, body || null, version, nowIso()).run();
+async function decisionsPost(request, env, user) {
+  let p; try { p = await readJson(request, 20000); } catch { return json({ error: 'Invalid decision.' }, 400); }
+  if (p.action) return decisionRespond(p, env, user);
+  if (!user.isOwner) return json({ error: 'Only DBY can post answers.' }, 403);
+  const d = decisionInput(p); if (!uuid(p.id) || !d) return json({ error: 'Add a title, their question and your answer.' }, 400);
+  const now = nowIso(), num = ((await env.DB.prepare('SELECT MAX(num) AS n FROM decisions').first('n')) || 0) + 1;
+  await env.DB.prepare('INSERT INTO decisions (id,num,title,question,asked_by,target,answer,plan,preview,status,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,\'waiting\',1,?,?)').bind(p.id, num, d.title, d.question, d.askedBy, d.target, d.answer, d.plan, d.preview, now, now).run();
+  await decLog(env, p.id, 'posted', user, null, 1);
+  return json({ ok: true, num });
+}
+async function decisionsPatch(request, env, user) {
+  if (!user.isOwner) return json({ error: 'Only DBY can edit answers.' }, 403);
+  let p; try { p = await readJson(request, 20000); } catch { return json({ error: 'Invalid decision.' }, 400); }
+  const d = decisionInput(p); if (!uuid(p.id) || !d) return json({ error: 'Add a title, their question and your answer.' }, 400);
+  const old = await env.DB.prepare('SELECT * FROM decisions WHERE id=?').bind(p.id).first();
+  if (!old) return json({ error: 'That decision was removed.' }, 404);
+  const changed = old.answer !== d.answer || old.plan !== d.plan || old.preview !== d.preview;   // what Lakeville approves
+  const version = old.version + (changed ? 1 : 0);
+  await env.DB.prepare(`UPDATE decisions SET title=?, question=?, asked_by=?, target=?, answer=?, plan=?, preview=?, version=?, updated_at=?${changed ? ", status='waiting', status_by=NULL, status_at=NULL" : ''} WHERE id=?`).bind(d.title, d.question, d.askedBy, d.target, d.answer, d.plan, d.preview, version, nowIso(), p.id).run();
+  if (changed) await decLog(env, p.id, 'revised', user, (p.note || '').trim().slice(0, 2000), version);
+  return json({ ok: true, revised: changed });
+}
+async function decisionRespond(p, env, user) {
+  if (!uuid(p.id) || !['approve', 'changes', 'question', 'reply'].includes(p.action) || (p.note != null && (typeof p.note !== 'string' || p.note.length > 4000))) return json({ error: 'Invalid response.' }, 400);
+  const note = (p.note || '').trim();
+  if (['changes', 'question', 'reply'].includes(p.action) && !note) return json({ error: p.action === 'changes' ? 'Say what should change.' : 'Write your message.' }, 400);
+  if (p.action === 'reply' && !user.isOwner) return json({ error: 'Invalid response.' }, 400);
+  if (['approve', 'changes'].includes(p.action) && user.isOwner) return json({ error: 'Lakeville approves or asks for changes.' }, 403);
+  const d = await env.DB.prepare('SELECT * FROM decisions WHERE id=?').bind(p.id).first();
+  if (!d) return json({ error: 'That decision was removed.' }, 404);
+  if (['approve', 'changes'].includes(p.action) && Number(p.version) !== d.version) return json({ error: 'DBY just updated this answer. Please read the new version.', stale: true }, 409);
+  if (p.action === 'approve' || p.action === 'changes') await env.DB.prepare('UPDATE decisions SET status=?, status_by=?, status_at=? WHERE id=?').bind(p.action === 'approve' ? 'approved' : 'changes', user.displayName, nowIso(), p.id).run();
+  await decLog(env, p.id, p.action, user, note, d.version);
+  return json({ ok: true });
+}
+async function decisionsDelete(request, env, user) {
+  if (!user.isOwner) return json({ error: 'Only DBY can remove answers.' }, 403);
+  const id = new URL(request.url).searchParams.get('id'); if (!uuid(id)) return json({ error: 'Invalid decision.' }, 400);
+  await env.DB.batch([env.DB.prepare('DELETE FROM decision_log WHERE decision_id=?').bind(id), env.DB.prepare('DELETE FROM decisions WHERE id=?').bind(id)]);
+  return json({ ok: true });
+}
+
 async function flagsGet(request, env, user) {
   const all = user.isOwner && new URL(request.url).searchParams.get('all') === '1';
   const r = await env.DB.prepare(`SELECT f.*, (SELECT name FROM people WHERE email=f.answered_by) AS person_name FROM scope_flags f WHERE f.status='live' OR (?1 AND f.status='suggested') OR ?2 ORDER BY f.created_at`).bind(user.isOwner ? 1 : 0, all ? 1 : 0).all();
@@ -501,7 +563,7 @@ async function handle(request, env) {
   }
   try {
     if (path === '/' && method === 'GET') return page(HTML);
-    if (path === '/app-preview.html' && method === 'GET') return user.isOwner ? page(PREVIEW_HTML) : json({ error: 'Not found.' }, 404);
+    if (path === '/app-preview.html' && method === 'GET') return user.isOwner && !url.searchParams.has('clean') ? page(PREVIEW_HTML) : url.searchParams.get('screen') ? page(PREVIEW_CLEAN_HTML) : json({ error: 'Not found.' }, 404);
     if (path === '/api/presence' && method === 'GET') return await presenceGet(env, user);
     if (path === '/api/me') {
       if (method === 'GET') return json({ email: user.email, name: user.displayName, named: user.named, isOwner: user.isOwner, attachments: !!env.BUCKET, version: VERSION });
@@ -520,6 +582,12 @@ async function handle(request, env) {
       if (method === 'POST') return await teamPost(request, env, user);
       if (method === 'PATCH') return await teamPatch(request, env, user);
       if (method === 'DELETE') return await teamDelete(request, env, user);
+    }
+    if (path === '/api/decisions') {
+      if (method === 'GET') return await decisionsGet(env, user);
+      if (method === 'POST') return await decisionsPost(request, env, user);
+      if (method === 'PATCH') return await decisionsPatch(request, env, user);
+      if (method === 'DELETE') return await decisionsDelete(request, env, user);
     }
     if (path === '/api/flags') {
       if (method === 'GET') return await flagsGet(request, env, user);
