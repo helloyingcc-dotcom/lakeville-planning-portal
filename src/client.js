@@ -1039,9 +1039,9 @@ function decZone(target) {
       tab('answer', (who === S.me?.name ? 'Your' : who + '’s') + ' answer'),
       tab('resp', 'DBY’s response', rows.length ? ok + '/' + rows.length + ' ✓' : composing ? 'draft' : null),
       asks.length ? tab('ask', 'DBY asks', asks.filter(a => a.status !== 'answered').length || '✓') : null),
-    view === 'resp' ? (composing ? composer(target) : responsePanel(target, rows)) : view === 'ask' ? asksPanel(target, asks) : null];
+    view === 'resp' ? (composing ? decComposer(target) : responsePanel(target, rows)) : view === 'ask' ? asksPanel(target, asks) : null];
 }
-function send(d, action, extra) {
+function decSend(d, action, extra) {
   return decCall(() => api('/api/decisions', jsonOpts('POST', { id: d.id, action, note: D.drafts[d.id] || '', version: d.version, ...extra })), () => { D.open[d.id] = null; D.drafts[d.id] = ''; });
 }
 async function decCall(fn, after) {
@@ -1049,18 +1049,18 @@ async function decCall(fn, after) {
   try { await fn(); if (after) after(); } catch (e) { D.error = errMsg(e, 'Could not save. Please try again.'); }
   finally { D.busy = false; D.last = ''; await pollDecisions(); renderDecZones(); }
 }
-const paras = text => String(text).split(/\n{2,}/).map(p => h('p', null, ...p.split('\n').flatMap((l, i) => i ? [h('br'), l] : [l])));
-function talk(d) {
+const decParas = text => String(text).split(/\n{2,}/).map(p => h('p', null, ...p.split('\n').flatMap((l, i) => i ? [h('br'), l] : [l])));
+function decTalk(d) {
   const items = d.log.filter(l => ['changes', 'question', 'reply', 'answer', 'revised'].includes(l.kind) && (l.body || l.kind === 'revised'));
   if (!items.length) return null;
-  return h('ol', { class: 'dlog' }, items.map(l => h('li', { class: 'k-' + l.kind }, h('strong', null, l.author_name), ' ' + ({ changes: 'responded', question: 'asked', reply: 'replied', answer: 'answered', revised: 'updated this' }[l.kind]) + ' · ' + fmtTime(l.created_at), l.body ? h('div', null, paras(l.body)) : null)));
+  return h('ol', { class: 'dlog' }, items.map(l => h('li', { class: 'k-' + l.kind }, h('strong', null, l.author_name), ' ' + ({ changes: 'responded', question: 'asked', reply: 'replied', answer: 'answered', revised: 'updated this' }[l.kind]) + ' · ' + fmtTime(l.created_at), l.body ? h('div', null, decParas(l.body)) : null)));
 }
-function replyBox(d, kind, label, button) {
+function decReplyBox(d, kind, label, button) {
   return h('div', { class: 'dreply' }, h('label', { for: 'dec-note-' + d.id }, label),
     h('textarea', { id: 'dec-note-' + d.id, rows: 2, maxlength: 4000, value: D.drafts[d.id] || '', oninput: e => { D.drafts[d.id] = e.target.value; } }),
-    h('div', null, h('button', { type: 'button', class: 'primary', disabled: D.busy, onclick: () => send(d, kind) }, button), h('button', { type: 'button', class: 'quiet', onclick: () => { D.open[d.id] = null; renderDecZones(); } }, 'Cancel')));
+    h('div', null, h('button', { type: 'button', class: 'primary', disabled: D.busy, onclick: () => decSend(d, kind) }, button), h('button', { type: 'button', class: 'quiet', onclick: () => { D.open[d.id] = null; renderDecZones(); } }, 'Cancel')));
 }
-function toggle(d, kind) { D.open[d.id] = D.open[d.id] === kind ? null : kind; renderDecZones(); setTimeout(() => $('dec-note-' + d.id)?.focus(), 30); }
+function decToggle(d, kind) { D.open[d.id] = D.open[d.id] === kind ? null : kind; renderDecZones(); setTimeout(() => $('dec-note-' + d.id)?.focus(), 30); }
 function responsePanel(target, rows) {
   const owner = S.me?.isOwner, waiting = rows.filter(r => r.status === 'waiting'), preview = rows.find(r => r.preview)?.preview;
   return h('div', { class: 'dec-panel', role: 'tabpanel' },
@@ -1068,15 +1068,15 @@ function responsePanel(target, rows) {
       h('div', { class: 'dec-tr dec-th', role: 'row' }, h('span', { role: 'columnheader' }, 'You asked for'), h('span', { role: 'columnheader' }, 'How we’ll do it'), h('span', { role: 'columnheader' }, owner ? 'Lakeville' : 'Your OK')),
       rows.map(r => h('div', { class: 'dec-tr st-' + r.status, role: 'row' },
         h('span', { role: 'cell', class: 'dec-ask' }, r.title),
-        h('span', { role: 'cell', class: 'dec-how' }, paras(r.answer), r.plan ? h('span', { class: 'dplan ' + r.plan }, PLAN_SHORT[r.plan]) : null),
+        h('span', { role: 'cell', class: 'dec-how' }, decParas(r.answer), r.plan ? h('span', { class: 'dplan ' + r.plan }, PLAN_SHORT[r.plan]) : null),
         h('span', { role: 'cell', class: 'dec-ok' },
           r.status === 'approved' ? h('span', { class: 'ok-by' }, '✓ ' + (r.status_by || '') , h('small', null, fmtTime(r.status_at)))
           : owner ? h('span', { class: 'st-pill st-' + r.status }, r.status === 'changes' ? '💬 Responded' : 'Waiting')
-          : [h('button', { type: 'button', class: 'mini approve', disabled: D.busy, title: 'Approve this row', onclick: () => send(r, 'approve') }, '✓'), h('button', { type: 'button', class: 'mini', title: 'Respond to this row', onclick: () => toggle(r, 'changes') }, '💬')],
-          owner && (r.status === 'changes' || lastTalk(r)?.kind === 'question') ? h('button', { type: 'button', class: 'mini', onclick: () => toggle(r, 'reply') }, 'Reply') : null,
-          !owner && r.status === 'approved' ? h('button', { type: 'button', class: 'mini quietish', title: 'Respond', onclick: () => toggle(r, 'changes') }, '💬') : null),
-        talk(r) ? h('div', { class: 'dec-sub' }, talk(r)) : null,
-        D.open[r.id] ? h('div', { class: 'dec-sub' }, D.open[r.id] === 'reply' ? replyBox(r, 'reply', 'Your reply', 'Send reply') : replyBox(r, 'changes', 'Your response to “' + r.title + '”', 'Send response')) : null))),
+          : [h('button', { type: 'button', class: 'mini approve', disabled: D.busy, title: 'Approve this row', onclick: () => decSend(r, 'approve') }, '✓'), h('button', { type: 'button', class: 'mini', title: 'Respond to this row', onclick: () => decToggle(r, 'changes') }, '💬')],
+          owner && (r.status === 'changes' || lastTalk(r)?.kind === 'question') ? h('button', { type: 'button', class: 'mini', onclick: () => decToggle(r, 'reply') }, 'Reply') : null,
+          !owner && r.status === 'approved' ? h('button', { type: 'button', class: 'mini quietish', title: 'Respond', onclick: () => decToggle(r, 'changes') }, '💬') : null),
+        decTalk(r) ? h('div', { class: 'dec-sub' }, decTalk(r)) : null,
+        D.open[r.id] ? h('div', { class: 'dec-sub' }, D.open[r.id] === 'reply' ? decReplyBox(r, 'reply', 'Your reply', 'Send reply') : decReplyBox(r, 'changes', 'Your response to “' + r.title + '”', 'Send response')) : null))),
     !owner && waiting.length > 1 ? h('div', { class: 'dactions' }, h('button', { type: 'button', class: 'primary approve', disabled: D.busy, onclick: () => decCall(async () => { for (const r of waiting) await api('/api/decisions', jsonOpts('POST', { id: r.id, action: 'approve', version: r.version })); }) }, '✓ Approve all ' + waiting.length)) : null,
     preview ? h('div', { class: 'dprev' }, h('div', { class: 'dprev-top' }, h('small', null, 'Try it: ' + (SCREENS.find(x => x[0] === preview)?.[1] || 'preview') + ' (sample data)'), h('a', { href: '/app-preview.html?screen=' + encodeURIComponent(preview) + '&clean=1', target: '_blank', rel: 'noreferrer' }, 'Open full size ↗')),
       h('iframe', { src: '/app-preview.html?screen=' + encodeURIComponent(preview) + '&clean=1', loading: 'lazy', title: 'Preview', class: 'dprev-frame' + (preview.startsWith('parent') ? ' phone' : '') })) : null,
@@ -1086,11 +1086,11 @@ function responsePanel(target, rows) {
 function asksPanel(target, asks) {
   const owner = S.me?.isOwner;
   return h('div', { class: 'dec-panel', role: 'tabpanel' }, asks.map(a => h('div', { class: 'dec-askcard st-' + a.status },
-    h('div', { class: 'dec-askq' }, h('span', { class: 'dec-q-icon', 'aria-hidden': 'true' }, '?'), h('div', null, paras(a.title), a.answer ? h('small', null, a.answer) : null)),
-    talk(a),
-    a.status === 'answered' && !D.open[a.id] ? h('div', { class: 'dactions' }, h('span', { class: 'ok-by' }, '✓ Answered by ' + (a.status_by || '')), owner ? h('button', { type: 'button', class: 'mini', onclick: () => toggle(a, 'reply') }, 'Reply') : h('button', { type: 'button', class: 'mini quietish', onclick: () => toggle(a, 'answer') }, 'Add more')) : null,
-    D.open[a.id] === 'reply' ? replyBox(a, 'reply', 'Your reply', 'Send reply')
-      : !owner && (a.status !== 'answered' || D.open[a.id] === 'answer') ? replyBox(a, 'answer', 'Your answer', 'Send answer')
+    h('div', { class: 'dec-askq' }, h('span', { class: 'dec-q-icon', 'aria-hidden': 'true' }, '?'), h('div', null, decParas(a.title), a.answer ? h('small', null, a.answer) : null)),
+    decTalk(a),
+    a.status === 'answered' && !D.open[a.id] ? h('div', { class: 'dactions' }, h('span', { class: 'ok-by' }, '✓ Answered by ' + (a.status_by || '')), owner ? h('button', { type: 'button', class: 'mini', onclick: () => decToggle(a, 'reply') }, 'Reply') : h('button', { type: 'button', class: 'mini quietish', onclick: () => decToggle(a, 'answer') }, 'Add more')) : null,
+    D.open[a.id] === 'reply' ? decReplyBox(a, 'reply', 'Your reply', 'Send reply')
+      : !owner && (a.status !== 'answered' || D.open[a.id] === 'answer') ? decReplyBox(a, 'answer', 'Your answer', 'Send answer')
       : owner && a.status !== 'answered' ? h('small', { class: 'muted' }, 'Waiting for Lakeville’s answer') : null)),
     owner ? h('div', { class: 'dactions' }, h('button', { type: 'button', class: 'quiet', onclick: () => editResponse(target) }, '✎ Edit')) : null,
     D.error ? h('p', { class: 'error', role: 'alert' }, D.error) : null);
@@ -1109,7 +1109,7 @@ function editResponse(target) {
   if (!D.compose.rows.length) D.compose.rows.push({ title: '', answer: '', plan: 'essentials' });
   D.view[target] = 'resp'; D.error = ''; renderDecZones();
 }
-function composer(target) {
+function decComposer(target) {
   const c = D.compose, redraw = () => fill(document.querySelector(`.dec-zone[data-dec="${target}"]`), decZone(target));
   const rowEd = (r, i, list, isAsk) => h('div', { class: 'dec-edrow' + (isAsk ? ' ask' : '') },
     isAsk ? h('textarea', { rows: 2, maxlength: 1000, placeholder: 'Your question for Lakeville', value: r.title, oninput: e => { r.title = e.target.value; } })
