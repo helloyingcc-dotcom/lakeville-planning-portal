@@ -1002,7 +1002,7 @@ const lakeNeeds = d => d.status === 'waiting' || lastTalk(d)?.kind === 'reply';
 function decAttention() { const f = S.me?.isOwner ? ownerNeeds : lakeNeeds; return decList().filter(f).length; }
 function targets() { return [...new Set(decList().map(d => d.target).filter(Boolean))]; }
 async function pollDecisions() {
-  if (document.hidden) return;
+  if (document.hidden && D.list !== null) return;
   try { const r = await api('/api/decisions'), snap = JSON.stringify(r.decisions); if (snap === D.last) return; D.last = snap; D.list = r.decisions; }
   catch { if (D.list === null) D.list = []; return; }
   renderNav(); renderDecZones();
@@ -1018,11 +1018,13 @@ function goQuestion(target, view) {
   const [, sec, key] = target.split(':'); if (view) D.view[target] = view; setTab(sec);
   setTimeout(() => { const el = $(fieldId(sec, key))?.closest('.field'); if (el) { el.scrollIntoView({ block: 'start' }); el.classList.add('pulse'); } }, 80);
 }
-function openFromHash() {   // links from the app demo: /#q=field:<section>:<key>&v=resp|ask
-  const m = /[#&]q=([^&]+)(?:&v=(\w+))?/.exec(location.hash); if (!m) return;
-  const target = decodeURIComponent(m[1]); history.replaceState(null, '', location.pathname);
+function openFromHash(tries = 0) {   // links from the app demo: /#q=field:<section>:<key>&v=resp|ask
+  const m = /[#&]q=([^&]+)(?:&v=(\w+))?/.exec(window.location.hash); if (!m) return;
+  if ((!S.loaded || D.list === null || !S.me) && tries < 40) { if (D.list === null) pollDecisions(); return setTimeout(() => openFromHash(tries + 1), 250); }
+  const target = decodeURIComponent(m[1]); history.replaceState(null, '', window.location.pathname + window.location.search);
   if (/^field:[a-z]+:\w+$/i.test(target)) goQuestion(target, m[2] || 'resp');
 }
+addEventListener('hashchange', () => openFromHash());
 function firstPending() { const f = S.me?.isOwner ? ownerNeeds : lakeNeeds, d = decList().find(f); return d ? [d.target, d.kind === 'ask' ? 'ask' : 'resp'] : null; }
 function decBanner() {
   const n = decAttention(), owner = S.me?.isOwner;
@@ -1238,5 +1240,5 @@ setInterval(() => { syncPlan(); pollList(); pollThread(); if (++flagTick % 3 ===
 renderShell();
 api('/api/me').then(me => { S.me = me; tabs = me.isOwner ? allTabs : allTabs.filter(t => !ownerOnly(t[0])); renderNav(); renderMain(); renderPanel(); pollTeam(); }).catch(e => { S.error = errMsg(e, 'Could not check your sign-in.'); renderMain(); });
 load();
-pollFlags(); pollDecisions().then(() => setTimeout(openFromHash, 600));
+pollFlags(); pollDecisions(); setTimeout(openFromHash, 300);
 })();

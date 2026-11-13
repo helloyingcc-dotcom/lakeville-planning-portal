@@ -309,3 +309,8 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .ai-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
 .ai-stats div{border:1px solid #dde3ef;border-radius:10px;padding:10px 12px;display:grid;background:#fff}.ai-stats strong{font-size:20px;color:#1f2f57}.ai-stats small{color:#6b7383}
 .ai-list{list-style:none;padding:0;margin:6px 0 12px;display:grid;gap:6px}.ai-list li{font-size:13.5px;border:1px solid #eef1f6;border-radius:8px;padding:8px 10px;display:grid;background:#fff}.ai-list li small{color:#6b7383}.ai-list li.want{border-color:#f3c99a;background:#fff8f0}
+/* narrow question column (e.g. laptop with the chat open): let the heading wrap and the response chart stack */
+.field{min-width:0}.field>*{min-width:0}
+.field-heading{flex-wrap:wrap}.field-heading>label{flex:1 1 220px;min-width:0}.field-heading .anchor-group{flex-wrap:wrap;row-gap:2px;flex-shrink:1}
+.dec-zone{container-type:inline-size}
+@container (max-width:600px){.dec-tr{grid-template-columns:1fr;gap:6px}.dec-ok{justify-content:flex-start}.dec-th{display:none}.dec-edhead{display:none}.dec-edrow{grid-template-columns:1fr}.dprev-frame{height:420px}}
