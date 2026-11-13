@@ -46,7 +46,7 @@ const SCHEMA = [
 ];
 let schemaReady = null;
 // Columns added after launch: ALTER fails harmlessly once the column exists.
-const ADDED_COLUMNS = ['ALTER TABLE planning_sections ADD COLUMN field_by TEXT', "ALTER TABLE scope_flags ADD COLUMN status TEXT DEFAULT 'live' NOT NULL", 'ALTER TABLE scope_flags ADD COLUMN why TEXT', 'ALTER TABLE scope_flags ADD COLUMN source TEXT'];
+const ADDED_COLUMNS = ['ALTER TABLE planning_sections ADD COLUMN field_by TEXT', "ALTER TABLE scope_flags ADD COLUMN status TEXT DEFAULT 'live' NOT NULL", 'ALTER TABLE scope_flags ADD COLUMN why TEXT', 'ALTER TABLE scope_flags ADD COLUMN source TEXT', "ALTER TABLE decisions ADD COLUMN kind TEXT DEFAULT 'row' NOT NULL", 'ALTER TABLE decisions ADD COLUMN ord INTEGER DEFAULT 0 NOT NULL'];
 function ensureSchema(db) {
   if (!schemaReady) schemaReady = db.batch(SCHEMA.map(s => db.prepare(s)))
     .then(() => Promise.all(ADDED_COLUMNS.map(sql => db.prepare(sql).run().catch(() => null))))
@@ -351,20 +351,23 @@ const TEAM_PAGE = 300, MAX_TOPICS = 40;
 /* ---------- "beyond Essentials" flags: DBY flags an ask, Lakeville says whether to plan it for a future upgrade ---------- */
 const FLAG_ANSWERS = ['', 'plan', 'skip'];
 /* ---------------- decisions: DBY answers a Lakeville question, Lakeville approves ---------------- */
-// status: waiting (needs Lakeville's OK) · approved · changes (Lakeville asked for changes). Editing the answer sends it back to waiting.
-// log kinds: posted · revised · approve · changes · question (Lakeville asks) · reply (DBY replies).
+// Shown inside the question box they answer (target = field:<section>:<key>), as a chart.
+// kind 'row': one line of DBY's response ("You asked for" = title, "How we'll do it" = answer). status: waiting · approved · changes (Lakeville responded).
+// kind 'ask': a question DBY asks Lakeville (title). status: waiting · answered.
+// Editing a row's answer/plan/preview sends it back to waiting. log kinds: posted · revised · approve · changes · answer · question · reply.
 const DEC_PLANS = ['', 'essentials', 'upgrade'];
 const DEC_SCREENS = ['', 'dash', 'form', 'vols', 'mail', 'import', 'regs', 'desk', 'pay', 'review', 'reports', 'emails', 'parent:events', 'parent:tickets'];
 async function decisionsGet(env, user) {
-  const d = await env.DB.prepare('SELECT * FROM decisions ORDER BY num').all();
+  const d = await env.DB.prepare('SELECT * FROM decisions ORDER BY ord, num').all();
   const log = await env.DB.prepare(`SELECT l.id, l.decision_id, l.kind, ${NAME('l', 'author_id', 'author_name')} AS author_name, l.body, l.version, l.created_at FROM decision_log l ORDER BY l.created_at`).all();
   const by = {}; for (const l of log.results) (by[l.decision_id] ||= []).push(l);
   return json({ decisions: d.results.map(x => ({ ...x, log: by[x.id] || [] })) });
 }
 function decisionInput(p) {
   const str = (v, max, req) => typeof v === 'string' && v.length <= max && (!req || v.trim());
-  if (!str(p.title, 200, true) || !str(p.question, 4000, true) || !str(p.answer, 8000, true) || (p.askedBy != null && !str(p.askedBy, 200)) || (p.target != null && !str(p.target, 200)) || !DEC_PLANS.includes(p.plan ?? '') || !DEC_SCREENS.includes(p.preview ?? '')) return null;
-  return { title: p.title.trim(), question: p.question.trim(), answer: p.answer.trim(), askedBy: (p.askedBy || '').trim() || null, target: (p.target || '').trim() || null, plan: p.plan || '', preview: p.preview || '' };
+  const kind = p.kind === 'ask' ? 'ask' : 'row';
+  if (!str(p.title, 1000, true) || !str(p.question ?? '', 4000) || !str(p.answer ?? '', 8000, kind === 'row') || (p.ord != null && !Number.isInteger(p.ord)) || (p.askedBy != null && !str(p.askedBy, 200)) || (p.target != null && !str(p.target, 200)) || !DEC_PLANS.includes(p.plan ?? '') || !DEC_SCREENS.includes(p.preview ?? '')) return null;
+  return { kind, ord: p.ord || 0, title: p.title.trim(), question: (p.question || '').trim(), answer: (p.answer || '').trim(), askedBy: (p.askedBy || '').trim() || null, target: (p.target || '').trim() || null, plan: p.plan || '', preview: p.preview || '' };
 }
 const decLog = (env, id, kind, user, body, version) => env.DB.prepare('INSERT INTO decision_log (id,decision_id,kind,author_id,author_name,body,version,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), id, kind, user.userId, user.displayName, body || null, version, nowIso()).run();
 async function decisionsPost(request, env, user) {
@@ -373,7 +376,7 @@ async function decisionsPost(request, env, user) {
   if (!user.isOwner) return json({ error: 'Only DBY can post answers.' }, 403);
   const d = decisionInput(p); if (!uuid(p.id) || !d) return json({ error: 'Add a title, their question and your answer.' }, 400);
   const now = nowIso(), num = ((await env.DB.prepare('SELECT MAX(num) AS n FROM decisions').first('n')) || 0) + 1;
-  await env.DB.prepare('INSERT INTO decisions (id,num,title,question,asked_by,target,answer,plan,preview,status,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,\'waiting\',1,?,?)').bind(p.id, num, d.title, d.question, d.askedBy, d.target, d.answer, d.plan, d.preview, now, now).run();
+  await env.DB.prepare('INSERT INTO decisions (id,num,title,question,asked_by,target,answer,plan,preview,status,version,created_at,updated_at,kind,ord) VALUES (?,?,?,?,?,?,?,?,?,\'waiting\',1,?,?,?,?)').bind(p.id, num, d.title, d.question, d.askedBy, d.target, d.answer, d.plan, d.preview, now, now, d.kind, d.ord).run();
   await decLog(env, p.id, 'posted', user, null, 1);
   return json({ ok: true, num });
 }
@@ -383,22 +386,23 @@ async function decisionsPatch(request, env, user) {
   const d = decisionInput(p); if (!uuid(p.id) || !d) return json({ error: 'Add a title, their question and your answer.' }, 400);
   const old = await env.DB.prepare('SELECT * FROM decisions WHERE id=?').bind(p.id).first();
   if (!old) return json({ error: 'That decision was removed.' }, 404);
-  const changed = old.answer !== d.answer || old.plan !== d.plan || old.preview !== d.preview;   // what Lakeville approves
+  const changed = old.kind === 'ask' ? old.title !== d.title : old.answer !== d.answer || old.plan !== d.plan || old.preview !== d.preview;   // what Lakeville approves / answers
   const version = old.version + (changed ? 1 : 0);
-  await env.DB.prepare(`UPDATE decisions SET title=?, question=?, asked_by=?, target=?, answer=?, plan=?, preview=?, version=?, updated_at=?${changed ? ", status='waiting', status_by=NULL, status_at=NULL" : ''} WHERE id=?`).bind(d.title, d.question, d.askedBy, d.target, d.answer, d.plan, d.preview, version, nowIso(), p.id).run();
+  await env.DB.prepare(`UPDATE decisions SET title=?, question=?, asked_by=?, target=?, answer=?, plan=?, preview=?, ord=?, version=?, updated_at=?${changed ? ", status='waiting', status_by=NULL, status_at=NULL" : ''} WHERE id=?`).bind(d.title, d.question, d.askedBy, d.target, d.answer, d.plan, d.preview, d.ord, version, nowIso(), p.id).run();
   if (changed) await decLog(env, p.id, 'revised', user, (p.note || '').trim().slice(0, 2000), version);
   return json({ ok: true, revised: changed });
 }
 async function decisionRespond(p, env, user) {
-  if (!uuid(p.id) || !['approve', 'changes', 'question', 'reply'].includes(p.action) || (p.note != null && (typeof p.note !== 'string' || p.note.length > 4000))) return json({ error: 'Invalid response.' }, 400);
+  if (!uuid(p.id) || !['approve', 'changes', 'question', 'reply', 'answer'].includes(p.action) || (p.note != null && (typeof p.note !== 'string' || p.note.length > 4000))) return json({ error: 'Invalid response.' }, 400);
   const note = (p.note || '').trim();
-  if (['changes', 'question', 'reply'].includes(p.action) && !note) return json({ error: p.action === 'changes' ? 'Say what should change.' : 'Write your message.' }, 400);
+  if (['changes', 'question', 'reply', 'answer'].includes(p.action) && !note) return json({ error: p.action === 'changes' ? 'Write your response.' : p.action === 'answer' ? 'Write your answer.' : 'Write your message.' }, 400);
   if (p.action === 'reply' && !user.isOwner) return json({ error: 'Invalid response.' }, 400);
-  if (['approve', 'changes'].includes(p.action) && user.isOwner) return json({ error: 'Lakeville approves or asks for changes.' }, 403);
+  if (['approve', 'changes', 'answer'].includes(p.action) && user.isOwner) return json({ error: 'Lakeville approves, responds or answers.' }, 403);
   const d = await env.DB.prepare('SELECT * FROM decisions WHERE id=?').bind(p.id).first();
   if (!d) return json({ error: 'That decision was removed.' }, 404);
-  if (['approve', 'changes'].includes(p.action) && Number(p.version) !== d.version) return json({ error: 'DBY just updated this answer. Please read the new version.', stale: true }, 409);
-  if (p.action === 'approve' || p.action === 'changes') await env.DB.prepare('UPDATE decisions SET status=?, status_by=?, status_at=? WHERE id=?').bind(p.action === 'approve' ? 'approved' : 'changes', user.displayName, nowIso(), p.id).run();
+  if ((p.action === 'answer') !== (d.kind === 'ask') && ['approve', 'changes', 'answer'].includes(p.action)) return json({ error: 'Invalid response.' }, 400);
+  if (['approve', 'changes'].includes(p.action) && Number(p.version) !== d.version) return json({ error: 'DBY just updated this. Please read the new version.', stale: true }, 409);
+  if (['approve', 'changes', 'answer'].includes(p.action)) await env.DB.prepare('UPDATE decisions SET status=?, status_by=?, status_at=? WHERE id=?').bind({ approve: 'approved', changes: 'changes', answer: 'answered' }[p.action], user.displayName, nowIso(), p.id).run();
   await decLog(env, p.id, p.action, user, note, d.version);
   return json({ ok: true });
 }

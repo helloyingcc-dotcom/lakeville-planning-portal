@@ -163,14 +163,15 @@ function field(f) {
     h('div', { class: 'field-heading' }, h('label', { for: id }, f.label),
       ownerOnly(tab) ? null : h('span', { class: 'anchor-group' },
         flagButton('field:' + tab + ':' + f.key),
-        S.me?.isOwner ? h('button', { class: 'comment-anchor respond-anchor', type: 'button', 'aria-label': 'Answer this for Lakeville to approve', onclick: () => startDecision(tab, f) }, icon('check', 13), 'Respond') : null,
+        S.me?.isOwner ? h('button', { class: 'comment-anchor respond-anchor', type: 'button', 'aria-label': 'Respond to this answer for Lakeville to approve', onclick: () => startResponse(tab, f) }, icon('check', 13), 'Respond') : null,
         S.me ? h('button', { class: 'comment-anchor team-anchor', type: 'button', 'aria-label': 'Discuss with the Lakeville team: ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => openTeam({ section: tab, field: f.key, label: titleFor(tab) + ' › ' + (sections[tab].find(x => x.key === f.key)?.label || f.label) }) }, icon('users', 13), 'Discuss with team') : null,
         h('button', { class: 'comment-anchor', type: 'button', 'data-anchor': f.key, 'aria-label': 'Ask DBY about ' + (sections[tab].find(x => x.key === f.key)?.label || f.label), onclick: () => comment(f) }, icon('message', 13), count ? String(count) : 'Ask DBY'))),
-    f.hint ? h('small', null, f.hint) : null, control,
+    f.hint ? h('small', null, f.hint) : null,
+    ownerOnly(tab) ? null : h('div', { class: 'dec-zone', 'data-dec': 'field:' + tab + ':' + f.key }, decZone('field:' + tab + ':' + f.key)),
+    control,
     h('div', { id: 'conflict-' + id }),
     ownerOnly(tab) ? null : flagSlot('field:' + tab + ':' + f.key),
     h('div', { class: 'answered-by', 'data-by': tab + ':' + f.key }, byLine(tab, f.key)),
-    ownerOnly(tab) ? null : h('div', { class: 'dec-pointer', 'data-dec': 'field:' + tab + ':' + f.key }, decPointer('field:' + tab + ':' + f.key)),
     h('div', { class: 'history', id: 'history-' + id }, historyLink(tab, f.key)),
     f.options || ownerOnly(tab) ? null : h('div', { class: 'answer-files', id: 'files-' + fieldId(tab, f.key) }, fileArea(tab, f.key)));
 }
@@ -983,124 +984,190 @@ async function flagCall(fn) {
   finally { F.busy = false; F.last = ''; renderFlagSlots(true); pollFlags(); }
 }
 
-/* ---------- decisions: DBY answers, Lakeville approves ---------- */
-const D = { list: null, last: '', filter: 'all', compose: null, busy: false, error: '', reply: {}, drafts: {} };
+/* ---------- DBY's response inside each question: a chart Lakeville approves row by row ---------- */
+// Each question box gets tabs: [<name>'s answer] [DBY's response] [DBY asks]. Rows ('row') get Approve / Respond; questions ('ask') get typed answers.
+const D = { list: null, last: '', view: {}, compose: null, busy: false, error: '', open: {}, drafts: {} };
 const SCREENS = [['', 'No preview'], ['desk', 'Check-in desk'], ['pay', 'Payments'], ['regs', 'Registrations'], ['dash', 'Dashboard'], ['form', 'Sign-up form'], ['vols', 'Volunteers'], ['mail', 'Email families'], ['import', 'Import a spreadsheet'], ['review', 'Pre-event review'], ['reports', 'Reports & export'], ['emails', 'Automated emails'], ['parent:events', 'Parent’s phone: events & sign-up'], ['parent:tickets', 'Parent’s phone: my tickets']];
-const PLAN_LABEL = { essentials: 'Part of your ' + TIERS.base.name + ' plan', upgrade: 'A future upgrade, not part of your current plan' };
+const PLAN_SHORT = { essentials: 'Your plan', upgrade: 'Future upgrade' };
 const decList = () => D.list || [];
-const lastLog = d => d.log[d.log.length - 1];
-const openQuestion = d => { const l = d.log.filter(x => x.kind === 'question' || x.kind === 'reply' || x.kind === 'posted' || x.kind === 'revised'); return l.length && l[l.length - 1].kind === 'question'; };
-const ownerNeeds = d => d.status === 'changes' || openQuestion(d);
-function decAttention() { return S.me?.isOwner ? decList().filter(ownerNeeds).length : decList().filter(d => d.status === 'waiting').length; }
+const groupOf = target => decList().filter(d => d.target === target);
+const rowsOf = target => groupOf(target).filter(d => d.kind !== 'ask');
+const asksOf = target => groupOf(target).filter(d => d.kind === 'ask');
+const lastTalk = d => [...d.log].reverse().find(l => ['question', 'reply', 'changes', 'answer', 'revised', 'posted'].includes(l.kind));
+const ownerNeeds = d => d.kind === 'ask' ? d.status === 'answered' && lastTalk(d)?.kind === 'answer' : d.status === 'changes' || lastTalk(d)?.kind === 'question';
+const lakeNeeds = d => d.status === 'waiting' || lastTalk(d)?.kind === 'reply';
+function decAttention() { const f = S.me?.isOwner ? ownerNeeds : lakeNeeds; return decList().filter(f).length; }
+function targets() { return [...new Set(decList().map(d => d.target).filter(Boolean))]; }
 async function pollDecisions() {
   if (document.hidden) return;
   try { const r = await api('/api/decisions'), snap = JSON.stringify(r.decisions); if (snap === D.last) return; D.last = snap; D.list = r.decisions; }
   catch { if (D.list === null) D.list = []; return; }
-  renderNav(); renderDecPointers();
-  const b = $('dec-banner'); if (b) b.replaceWith(decBanner() || h('div', { id: 'dec-banner' }));
-  if ((S.tab === 'decisions' && !$('decisions')?.contains(document.activeElement)) || (S.tab === 'start' && !document.activeElement?.matches('textarea,input,select'))) renderMain();
+  renderNav(); renderDecZones();
+  const b = $('dec-banner'); if (b) b.replaceWith(decBanner());
+  const sp = $('start-progress'); if (sp) sp.replaceWith(startProgress() || h('span', { id: 'start-progress' }));
+  if (S.tab === 'decisions') renderMain();
 }
+function renderDecZones() {
+  for (const el of document.querySelectorAll('.dec-zone')) { if (el.contains(document.activeElement) && document.activeElement.matches('textarea,input,select')) continue; fill(el, decZone(el.dataset.dec)); }
+}
+function whereFor(target) { const [, sec, key] = target.split(':'); return (tabs.find(t => t[0] === sec)?.[1] || sec) + ' › ' + (sections[sec]?.find(x => x.key === key)?.label || key); }
+function goQuestion(target, view) {
+  const [, sec, key] = target.split(':'); if (view) D.view[target] = view; setTab(sec);
+  setTimeout(() => { const el = $(fieldId(sec, key))?.closest('.field'); if (el) { el.scrollIntoView({ block: 'start' }); el.classList.add('pulse'); } }, 80);
+}
+function firstPending() { const f = S.me?.isOwner ? ownerNeeds : lakeNeeds, d = decList().find(f); return d ? [d.target, d.kind === 'ask' ? 'ask' : 'resp'] : null; }
 function decBanner() {
-  const n = decAttention();
+  const n = decAttention(), owner = S.me?.isOwner;
   if (!n || !D.list) return h('div', { id: 'dec-banner' });
-  const owner = S.me?.isOwner;
   return h('div', { id: 'dec-banner', class: 'dec-banner', role: 'status' }, h('span', { class: 'dec-banner-icon', 'aria-hidden': 'true' }, '📋'),
-    h('span', null, owner ? h('strong', null, n + (n === 1 ? ' decision needs' : ' decisions need') + ' your attention') : [h('strong', null, 'DBY answered ' + n + (n === 1 ? ' of your questions.' : ' of your questions.')), ' Your OK is needed.']),
-    h('button', { class: 'primary', type: 'button', onclick: () => setTab('decisions') }, 'Review'));
+    h('span', null, owner ? h('strong', null, n + (n === 1 ? ' response from Lakeville needs' : ' responses from Lakeville need') + ' your attention') : [h('strong', null, 'DBY responded to your answers.'), ' ' + n + (n === 1 ? ' item needs' : ' items need') + ' your OK or a reply.']),
+    h('button', { class: 'primary', type: 'button', onclick: () => { const p = firstPending(); if (p) goQuestion(p[0], p[1]); } }, 'Review'));
 }
-function decPointer(target) {
-  const ds = decList().filter(d => d.target === target); if (!ds.length) return null;
-  return ds.map(d => h('button', { type: 'button', class: 'dec-link st-' + d.status, onclick: () => goDecision(d.num) }, icon('message', 12), 'DBY answered: D' + d.num + ' · ' + statusText(d)));
+const statusLine = d => d.kind === 'ask' ? (d.status === 'answered' ? 'Answered' : 'Needs your answer') : d.status === 'approved' ? 'Approved' : d.status === 'changes' ? 'Responded' : 'Waiting';
+function decZone(target) {
+  const rows = rowsOf(target), asks = asksOf(target), owner = S.me?.isOwner, composing = D.compose?.target === target;
+  const zoneField = () => document.querySelector(`.dec-zone[data-dec="${target}"]`)?.closest('.field');
+  if (!rows.length && !asks.length && !composing) { setTimeout(() => zoneField()?.classList.remove('dec-hide-answer')); return null; }
+  let view = composing ? 'resp' : D.view[target] || (owner ? 'answer' : rows.some(lakeNeeds) ? 'resp' : asks.some(lakeNeeds) ? 'ask' : 'answer');
+  if (view === 'ask' && !asks.length) view = 'resp';
+  setTimeout(() => zoneField()?.classList.toggle('dec-hide-answer', view !== 'answer'));
+  const [, sec, key] = target.split(':'), who = S.records[sec]?.answeredBy?.[key]?.n || 'Lakeville';
+  const ok = rows.filter(r => r.status === 'approved').length;
+  const tab = (id, label, badge) => h('button', { type: 'button', role: 'tab', 'aria-selected': view === id ? 'true' : 'false', onclick: () => { D.view[target] = id; if (id !== 'resp' && composing) D.compose = null; fill(document.querySelector(`.dec-zone[data-dec="${target}"]`), decZone(target)); } }, label, badge ? h('span', { class: 'dec-tab-badge' }, badge) : null);
+  return [
+    h('div', { class: 'dec-tabs', role: 'tablist' },
+      tab('answer', (who === S.me?.name ? 'Your' : who + '’s') + ' answer'),
+      tab('resp', 'DBY’s response', rows.length ? ok + '/' + rows.length + ' ✓' : composing ? 'draft' : null),
+      asks.length ? tab('ask', 'DBY asks', asks.filter(a => a.status !== 'answered').length || '✓') : null),
+    view === 'resp' ? (composing ? composer(target) : responsePanel(target, rows)) : view === 'ask' ? asksPanel(target, asks) : null];
 }
-function renderDecPointers() { for (const el of document.querySelectorAll('[data-dec]')) fill(el, decPointer(el.dataset.dec)); }
-function statusText(d) { return d.status === 'approved' ? '✓ Approved' : d.status === 'changes' ? 'Changes requested' : (S.me?.isOwner ? 'Waiting for Lakeville' : 'Waiting for your OK'); }
-function goDecision(num) { D.filter = 'all'; setTab('decisions'); setTimeout(() => { const el = $('D' + num); if (el) { el.scrollIntoView({ block: 'start' }); el.classList.add('pulse'); } }, 60); }
-function goQuestion(target) {
-  const [, sec, key] = target.split(':'); setTab(sec);
-  setTimeout(() => { const el = $(fieldId(sec, key)); if (el) { el.scrollIntoView({ block: 'center' }); el.closest('.field')?.classList.add('pulse'); } }, 80);
+function send(d, action, extra) {
+  return decCall(() => api('/api/decisions', jsonOpts('POST', { id: d.id, action, note: D.drafts[d.id] || '', version: d.version, ...extra })), () => { D.open[d.id] = null; D.drafts[d.id] = ''; });
 }
-function startDecision(tab, f) {
-  const label = sections[tab].find(x => x.key === f.key)?.label || f.label;
-  D.compose = { id: null, title: label, question: (S.data[tab]?.[f.key] || '').trim(), askedBy: S.records[tab]?.answeredBy?.[f.key]?.n || '', target: 'field:' + tab + ':' + f.key, where: titleFor(tab) + ' › ' + label, answer: '', plan: 'essentials', preview: '' };
-  D.error = ''; setTab('decisions'); setTimeout(() => $('dec-answer')?.focus(), 60);
-}
-function editDecision(d) { D.compose = { id: d.id, title: d.title, question: d.question, askedBy: d.asked_by || '', target: d.target || '', where: d.target ? whereFor(d.target) : '', answer: d.answer, plan: d.plan, preview: d.preview, note: '' }; D.error = ''; renderMain(); setTimeout(() => $('dec-answer')?.focus(), 60); }
-function whereFor(target) { const [, sec, key] = target.split(':'); return titleFor(sec) + ' › ' + (sections[sec]?.find(x => x.key === key)?.label || key); }
 async function decCall(fn, after) {
   if (D.busy) return; D.busy = true; D.error = '';
-  try { await fn(); if (after) after(); } catch (e) { D.error = errMsg(e, 'Could not save. Please try again.'); if (e.stale) D.last = ''; }
-  finally { D.busy = false; D.last = ''; await pollDecisions(); renderMain(); }
+  try { await fn(); if (after) after(); } catch (e) { D.error = errMsg(e, 'Could not save. Please try again.'); }
+  finally { D.busy = false; D.last = ''; await pollDecisions(); renderDecZones(); }
 }
 const paras = text => String(text).split(/\n{2,}/).map(p => h('p', null, ...p.split('\n').flatMap((l, i) => i ? [h('br'), l] : [l])));
+function talk(d) {
+  const items = d.log.filter(l => ['changes', 'question', 'reply', 'answer', 'revised'].includes(l.kind) && (l.body || l.kind === 'revised'));
+  if (!items.length) return null;
+  return h('ol', { class: 'dlog' }, items.map(l => h('li', { class: 'k-' + l.kind }, h('strong', null, l.author_name), ' ' + ({ changes: 'responded', question: 'asked', reply: 'replied', answer: 'answered', revised: 'updated this' }[l.kind]) + ' · ' + fmtTime(l.created_at), l.body ? h('div', null, paras(l.body)) : null)));
+}
+function replyBox(d, kind, label, button) {
+  return h('div', { class: 'dreply' }, h('label', { for: 'dec-note-' + d.id }, label),
+    h('textarea', { id: 'dec-note-' + d.id, rows: 2, maxlength: 4000, value: D.drafts[d.id] || '', oninput: e => { D.drafts[d.id] = e.target.value; } }),
+    h('div', null, h('button', { type: 'button', class: 'primary', disabled: D.busy, onclick: () => send(d, kind) }, button), h('button', { type: 'button', class: 'quiet', onclick: () => { D.open[d.id] = null; renderDecZones(); } }, 'Cancel')));
+}
+function toggle(d, kind) { D.open[d.id] = D.open[d.id] === kind ? null : kind; renderDecZones(); setTimeout(() => $('dec-note-' + d.id)?.focus(), 30); }
+function responsePanel(target, rows) {
+  const owner = S.me?.isOwner, waiting = rows.filter(r => r.status === 'waiting'), preview = rows.find(r => r.preview)?.preview;
+  return h('div', { class: 'dec-panel', role: 'tabpanel' },
+    h('div', { class: 'dec-table', role: 'table', 'aria-label': 'DBY’s response' },
+      h('div', { class: 'dec-tr dec-th', role: 'row' }, h('span', { role: 'columnheader' }, 'You asked for'), h('span', { role: 'columnheader' }, 'How we’ll do it'), h('span', { role: 'columnheader' }, owner ? 'Lakeville' : 'Your OK')),
+      rows.map(r => h('div', { class: 'dec-tr st-' + r.status, role: 'row' },
+        h('span', { role: 'cell', class: 'dec-ask' }, r.title),
+        h('span', { role: 'cell', class: 'dec-how' }, paras(r.answer), r.plan ? h('span', { class: 'dplan ' + r.plan }, PLAN_SHORT[r.plan]) : null),
+        h('span', { role: 'cell', class: 'dec-ok' },
+          r.status === 'approved' ? h('span', { class: 'ok-by' }, '✓ ' + (r.status_by || '') , h('small', null, fmtTime(r.status_at)))
+          : owner ? h('span', { class: 'st-pill st-' + r.status }, r.status === 'changes' ? '💬 Responded' : 'Waiting')
+          : [h('button', { type: 'button', class: 'mini approve', disabled: D.busy, title: 'Approve this row', onclick: () => send(r, 'approve') }, '✓'), h('button', { type: 'button', class: 'mini', title: 'Respond to this row', onclick: () => toggle(r, 'changes') }, '💬')],
+          owner && (r.status === 'changes' || lastTalk(r)?.kind === 'question') ? h('button', { type: 'button', class: 'mini', onclick: () => toggle(r, 'reply') }, 'Reply') : null,
+          !owner && r.status === 'approved' ? h('button', { type: 'button', class: 'mini quietish', title: 'Respond', onclick: () => toggle(r, 'changes') }, '💬') : null),
+        talk(r) ? h('div', { class: 'dec-sub' }, talk(r)) : null,
+        D.open[r.id] ? h('div', { class: 'dec-sub' }, D.open[r.id] === 'reply' ? replyBox(r, 'reply', 'Your reply', 'Send reply') : replyBox(r, 'changes', 'Your response to “' + r.title + '”', 'Send response')) : null))),
+    !owner && waiting.length > 1 ? h('div', { class: 'dactions' }, h('button', { type: 'button', class: 'primary approve', disabled: D.busy, onclick: () => decCall(async () => { for (const r of waiting) await api('/api/decisions', jsonOpts('POST', { id: r.id, action: 'approve', version: r.version })); }) }, '✓ Approve all ' + waiting.length)) : null,
+    preview ? h('div', { class: 'dprev' }, h('div', { class: 'dprev-top' }, h('small', null, 'Try it: ' + (SCREENS.find(x => x[0] === preview)?.[1] || 'preview') + ' (sample data)'), h('a', { href: '/app-preview.html?screen=' + encodeURIComponent(preview) + '&clean=1', target: '_blank', rel: 'noreferrer' }, 'Open full size ↗')),
+      h('iframe', { src: '/app-preview.html?screen=' + encodeURIComponent(preview) + '&clean=1', loading: 'lazy', title: 'Preview', class: 'dprev-frame' + (preview.startsWith('parent') ? ' phone' : '') })) : null,
+    owner ? h('div', { class: 'dactions' }, h('button', { type: 'button', class: 'quiet', onclick: () => editResponse(target) }, '✎ Edit response')) : null,
+    D.error ? h('p', { class: 'error', role: 'alert' }, D.error) : null);
+}
+function asksPanel(target, asks) {
+  const owner = S.me?.isOwner;
+  return h('div', { class: 'dec-panel', role: 'tabpanel' }, asks.map(a => h('div', { class: 'dec-askcard st-' + a.status },
+    h('div', { class: 'dec-askq' }, h('span', { class: 'dec-q-icon', 'aria-hidden': 'true' }, '?'), h('div', null, paras(a.title), a.answer ? h('small', null, a.answer) : null)),
+    talk(a),
+    a.status === 'answered' && !D.open[a.id] ? h('div', { class: 'dactions' }, h('span', { class: 'ok-by' }, '✓ Answered by ' + (a.status_by || '')), owner ? h('button', { type: 'button', class: 'mini', onclick: () => toggle(a, 'reply') }, 'Reply') : h('button', { type: 'button', class: 'mini quietish', onclick: () => toggle(a, 'answer') }, 'Add more')) : null,
+    D.open[a.id] === 'reply' ? replyBox(a, 'reply', 'Your reply', 'Send reply')
+      : !owner && (a.status !== 'answered' || D.open[a.id] === 'answer') ? replyBox(a, 'answer', 'Your answer', 'Send answer')
+      : owner && a.status !== 'answered' ? h('small', { class: 'muted' }, 'Waiting for Lakeville’s answer') : null)),
+    owner ? h('div', { class: 'dactions' }, h('button', { type: 'button', class: 'quiet', onclick: () => editResponse(target) }, '✎ Edit')) : null,
+    D.error ? h('p', { class: 'error', role: 'alert' }, D.error) : null);
+}
+/* owner: write or edit the chart */
+function startResponse(tab, f) {
+  const target = 'field:' + tab + ':' + f.key;
+  if (groupOf(target).length) return editResponse(target);
+  D.compose = { target, askedBy: S.records[tab]?.answeredBy?.[f.key]?.n || '', question: (S.data[tab]?.[f.key] || '').trim(), preview: '', rows: [{ title: '', answer: '', plan: 'essentials' }], asks: [] };
+  D.view[target] = 'resp'; D.error = ''; renderDecZones(); setTimeout(() => document.querySelector(`.dec-zone[data-dec="${target}"] input`)?.focus(), 40);
+}
+function editResponse(target) {
+  const g = groupOf(target);
+  D.compose = { target, askedBy: g[0]?.asked_by || '', question: g[0]?.question || '', preview: g.find(r => r.preview)?.preview || '',
+    rows: g.filter(d => d.kind !== 'ask').map(d => ({ id: d.id, title: d.title, answer: d.answer, plan: d.plan, orig: d })), asks: g.filter(d => d.kind === 'ask').map(d => ({ id: d.id, title: d.title, answer: d.answer, orig: d })), removed: [] };
+  if (!D.compose.rows.length) D.compose.rows.push({ title: '', answer: '', plan: 'essentials' });
+  D.view[target] = 'resp'; D.error = ''; renderDecZones();
+}
+function composer(target) {
+  const c = D.compose, redraw = () => fill(document.querySelector(`.dec-zone[data-dec="${target}"]`), decZone(target));
+  const rowEd = (r, i, list, isAsk) => h('div', { class: 'dec-edrow' + (isAsk ? ' ask' : '') },
+    isAsk ? h('textarea', { rows: 2, maxlength: 1000, placeholder: 'Your question for Lakeville', value: r.title, oninput: e => { r.title = e.target.value; } })
+      : [h('input', { maxlength: 300, placeholder: 'You asked for…', value: r.title, oninput: e => { r.title = e.target.value; } }),
+         h('textarea', { rows: 2, maxlength: 8000, placeholder: 'How we’ll do it', value: r.answer, oninput: e => { r.answer = e.target.value; } }),
+         h('select', { onchange: e => { r.plan = e.target.value; }, 'aria-label': 'Part of' }, [['essentials', 'Your plan'], ['upgrade', 'Future upgrade'], ['', '—']].map(([v, l]) => h('option', { value: v, selected: r.plan === v }, l)))],
+    h('button', { type: 'button', class: 'mini', title: 'Remove', onclick: () => { if (r.id) c.removed.push(r.id); list.splice(i, 1); redraw(); } }, '✕'));
+  const save = () => decCall(async () => {
+    const rows = c.rows.filter(r => r.title.trim() || r.answer.trim()), asks = c.asks.filter(a => a.title.trim());
+    if (!rows.length && !asks.length) throw new Error('Add at least one row or question.');
+    if (rows.some(r => !r.title.trim() || !r.answer.trim())) throw new Error('Each row needs “You asked for” and “How we’ll do it”.');
+    const base = { target: c.target, askedBy: c.askedBy, question: c.question };
+    let ord = 0;
+    for (const r of rows) { const body = { ...base, kind: 'row', title: r.title, answer: r.answer, plan: r.plan, preview: ord === 0 ? c.preview : '', ord: ord++ };
+      if (!r.id) await api('/api/decisions', jsonOpts('POST', { id: crypto.randomUUID(), ...body }));
+      else if (r.orig.title !== body.title || r.orig.answer !== body.answer || r.orig.plan !== body.plan || r.orig.preview !== body.preview || r.orig.ord !== body.ord) await api('/api/decisions', jsonOpts('PATCH', { id: r.id, ...body })); }
+    for (const a of asks) { const body = { ...base, kind: 'ask', title: a.title, answer: a.answer || '', plan: '', preview: '', ord: ord++ };
+      if (!a.id) await api('/api/decisions', jsonOpts('POST', { id: crypto.randomUUID(), ...body }));
+      else if (a.orig.title !== body.title || a.orig.answer !== body.answer || a.orig.ord !== body.ord) await api('/api/decisions', jsonOpts('PATCH', { id: a.id, ...body })); }
+    for (const id of c.removed || []) await api('/api/decisions?id=' + id, { method: 'DELETE' });
+  }, () => { D.compose = null; D.view[target] = 'resp'; });
+  return h('div', { class: 'dec-panel dec-compose', role: 'tabpanel' },
+    h('p', { class: 'muted' }, 'One row per thing they asked for. Lakeville approves each row or responds to it. Changing a row they approved asks them to approve it again.'),
+    h('div', { class: 'dec-edhead' }, h('span', null, 'You asked for'), h('span', null, 'How we’ll do it'), h('span', null, 'Part of'), h('span')),
+    c.rows.map((r, i) => rowEd(r, i, c.rows, false)),
+    h('button', { type: 'button', class: 'quiet', onclick: () => { c.rows.push({ title: '', answer: '', plan: 'essentials' }); redraw(); } }, '+ Add row'),
+    h('h3', null, 'Questions for Lakeville (optional)'),
+    c.asks.map((a, i) => rowEd(a, i, c.asks, true)),
+    h('button', { type: 'button', class: 'quiet', onclick: () => { c.asks.push({ title: '' }); redraw(); } }, '+ Add a question'),
+    h('label', { class: 'dec-prevpick' }, 'Show a preview ', h('select', { onchange: e => { c.preview = e.target.value; } }, SCREENS.map(([v, l]) => h('option', { value: v, selected: c.preview === v }, l)))),
+    D.error ? h('p', { class: 'error', role: 'alert' }, D.error) : null,
+    h('div', { class: 'dactions' }, h('button', { type: 'button', class: 'primary', disabled: D.busy, onclick: save }, D.busy ? 'Saving…' : c.rows.some(r => r.id) ? 'Save changes' : 'Send to Lakeville'), h('button', { type: 'button', class: 'quiet', onclick: () => { D.compose = null; redraw(); } }, 'Cancel')));
+}
+/* summary page + start progress */
+function progressNumbers() { const rows = decList().filter(d => d.kind !== 'ask'), asks = decList().filter(d => d.kind === 'ask'); return { done: rows.filter(r => r.status === 'approved').length + asks.filter(a => a.status === 'answered').length, total: rows.length + asks.length }; }
 function startProgress() {
-  const list = decList(); if (!list.length) return null;
-  const ok = list.filter(d => d.status === 'approved').length;
+  const { done, total } = progressNumbers(); if (!total) return null;
   return h('section', { class: 'dec-progress', id: 'start-progress' },
-    h('div', { class: 'dec-progress-top' }, h('strong', null, 'Planning progress'), h('span', null, ok + ' of ' + list.length + ' decisions approved')),
-    h('div', { class: 'dec-bar' }, h('span', { style: 'width:' + Math.round(ok / list.length * 100) + '%' })),
-    h('button', { class: 'linkish', type: 'button', style: 'justify-self:start;font-size:13px', onclick: () => setTab('decisions') }, 'See all decisions →'));
+    h('div', { class: 'dec-progress-top' }, h('strong', null, 'Planning progress'), h('span', null, done + ' of ' + total + ' approved or answered')),
+    h('div', { class: 'dec-bar' }, h('span', { style: 'width:' + Math.round(done / total * 100) + '%' })),
+    h('button', { class: 'linkish', type: 'button', style: 'justify-self:start;font-size:13px', onclick: () => setTab('decisions') }, 'See the summary →'));
 }
 function decisionsPage() {
-  const list = decList(), owner = S.me?.isOwner, approved = list.filter(d => d.status === 'approved').length;
-  const counts = { all: list.length, waiting: list.filter(d => d.status === 'waiting').length, changes: list.filter(d => d.status === 'changes').length, approved };
-  const shown = list.filter(d => D.filter === 'all' || d.status === D.filter);
+  const { done, total } = progressNumbers(), owner = S.me?.isOwner, ts = targets();
   return h('div', { id: 'decisions' },
     h('section', { class: 'dec-progress' },
-      h('div', { class: 'dec-progress-top' }, h('strong', null, 'Planning progress'), h('span', null, list.length ? approved + ' of ' + list.length + ' approved' : 'No answers yet')),
-      h('div', { class: 'dec-bar', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': list.length, 'aria-valuenow': approved }, h('span', { style: 'width:' + (list.length ? Math.round(approved / list.length * 100) : 0) + '%' })),
-      h('p', null, owner ? 'Answer a Lakeville question with “Respond” beside it, or add one here. Lakeville approves each answer, asks a question, or requests changes. Editing an answer asks them to approve again.' : 'When DBY answers one of your questions, it shows up here. Anyone on the Lakeville team can approve it, ask a question, or request changes. Approved answers are what DBY builds.')),
-    owner ? (D.compose ? composer() : h('button', { class: 'primary dec-new', type: 'button', onclick: () => { D.compose = { id: null, title: '', question: '', askedBy: '', target: '', where: '', answer: '', plan: 'essentials', preview: '' }; renderMain(); } }, '+ New answer')) : null,
-    list.length ? h('div', { class: 'dec-filters', role: 'group', 'aria-label': 'Show' }, [['all', 'All'], ['waiting', 'Waiting'], ['changes', 'Changes requested'], ['approved', 'Approved']].map(([k, l]) =>
-      h('button', { type: 'button', 'aria-pressed': D.filter === k ? 'true' : 'false', onclick: () => { D.filter = k; renderMain(); } }, l + ' (' + counts[k] + ')'))) : null,
-    D.list === null ? h('p', { role: 'status' }, 'Loading…') : !list.length ? h('div', { class: 'dec-empty' }, owner ? 'No answers posted yet. Use “Respond” beside any Lakeville answer to start.' : 'Nothing to review yet. DBY’s answers to your questions will appear here.') : null,
-    shown.map(decCard));
-}
-function decCard(d) {
-  const owner = S.me?.isOwner, r = D.reply[d.id], items = d.log.filter(l => l.kind !== 'posted');
-  const act = (kind, label, cls) => h('button', { type: 'button', class: cls, disabled: D.busy, onclick: () => { D.reply[d.id] = r === kind ? null : kind; renderMain(); setTimeout(() => $('dec-note-' + d.id)?.focus(), 30); } }, label);
-  const send = kind => decCall(() => api('/api/decisions', jsonOpts('POST', { id: d.id, action: kind, note: D.drafts[d.id] || '', version: d.version })), () => { D.reply[d.id] = null; D.drafts[d.id] = ''; });
-  return h('article', { class: 'decision st-' + d.status, id: 'D' + d.num },
-    h('header', null, h('span', { class: 'dnum' }, 'D' + d.num), h('h2', null, d.title), h('span', { class: 'dstatus st-' + d.status }, statusText(d))),
-    h('div', { class: 'dq' }, h('small', null, 'Their question' + (d.asked_by ? ' · from ' + d.asked_by : ''), d.target ? [' · ', h('button', { type: 'button', class: 'linkish', onclick: () => goQuestion(d.target) }, whereFor(d.target))] : null), h('blockquote', null, paras(d.question))),
-    h('div', { class: 'da' }, h('small', null, 'DBY’s answer' + (d.version > 1 ? ' · updated' : '') + ' · ' + fmtTime(d.updated_at)), paras(d.answer)),
-    d.plan ? h('span', { class: 'dplan ' + d.plan }, PLAN_LABEL[d.plan]) : null,
-    d.preview ? h('div', { class: 'dprev' }, h('div', { class: 'dprev-top' }, h('small', null, 'Try it: ' + (SCREENS.find(x => x[0] === d.preview)?.[1] || 'preview') + ' (sample data)'), h('a', { href: '/app-preview.html?screen=' + encodeURIComponent(d.preview) + '&clean=1', target: '_blank', rel: 'noreferrer' }, 'Open full size ↗')),
-      h('iframe', { src: '/app-preview.html?screen=' + encodeURIComponent(d.preview) + '&clean=1', loading: 'lazy', title: 'Preview of ' + d.title, class: 'dprev-frame' + (d.preview.startsWith('parent') ? ' phone' : '') })) : null,
-    items.length ? h('ol', { class: 'dlog' }, items.map(l => h('li', { class: 'k-' + l.kind }, h('strong', null, l.author_name), ' ' + ({ approve: 'approved', changes: 'requested changes', question: 'asked', reply: 'replied', revised: 'updated the answer' }[l.kind] || l.kind) + ' · ' + fmtTime(l.created_at), l.body ? h('div', null, paras(l.body)) : null))) : null,
-    d.status === 'approved' ? h('div', { class: 'dapproved' }, '✓ Approved by ' + (d.status_by || 'Lakeville') + ' · ' + fmtTime(d.status_at)) : null,
-    owner ? h('div', { class: 'dactions' },
-      h('button', { type: 'button', class: 'primary', onclick: () => editDecision(d) }, d.status === 'changes' ? 'Revise answer' : 'Edit answer'),
-      act('reply', 'Reply', ''),
-      h('button', { type: 'button', class: 'quiet', onclick: () => { if (D.delArm !== d.id) { D.delArm = d.id; renderMain(); return; } D.delArm = null; decCall(() => api('/api/decisions?id=' + d.id, { method: 'DELETE' })); } }, D.delArm === d.id ? 'Click again to delete D' + d.num : 'Delete'))
-    : h('div', { class: 'dactions' },
-      d.status !== 'approved' ? h('button', { type: 'button', class: 'primary approve', disabled: D.busy, onclick: () => send('approve') }, '✓ Approve') : null,
-      act('question', '💬 Ask a question', ''),
-      act('changes', d.status === 'approved' ? 'Request changes' : '✎ Request changes', '')),
-    r ? h('div', { class: 'dreply' },
-      h('label', { for: 'dec-note-' + d.id }, { question: 'Your question for DBY', changes: 'What should change?', reply: 'Your reply' }[r]),
-      h('textarea', { id: 'dec-note-' + d.id, rows: 3, maxlength: 4000, value: D.drafts[d.id] || '', oninput: e => { D.drafts[d.id] = e.target.value; } }),
-      h('div', null, h('button', { type: 'button', class: 'primary', disabled: D.busy, onclick: () => send(r) }, { question: 'Send question', changes: 'Request changes', reply: 'Send reply' }[r]), h('button', { type: 'button', class: 'quiet', onclick: () => { D.reply[d.id] = null; renderMain(); } }, 'Cancel'))) : null,
-    D.error && (D.reply[d.id] || D.compose?.id === d.id) ? h('p', { class: 'error', role: 'alert' }, D.error) : null);
-}
-function composer() {
-  const c = D.compose, set = k => e => { c[k] = e.target.value; };
-  const save = () => decCall(() => c.id
-    ? api('/api/decisions', jsonOpts('PATCH', { id: c.id, title: c.title, question: c.question, askedBy: c.askedBy, target: c.target, answer: c.answer, plan: c.plan, preview: c.preview, note: c.note || '' }))
-    : api('/api/decisions', jsonOpts('POST', { id: crypto.randomUUID(), title: c.title, question: c.question, askedBy: c.askedBy, target: c.target, answer: c.answer, plan: c.plan, preview: c.preview })), () => { D.compose = null; D.filter = 'all'; });
-  return h('section', { class: 'dec-compose', 'aria-label': c.id ? 'Edit answer' : 'New answer' },
-    h('h2', null, c.id ? 'Edit answer' : 'Answer for Lakeville to approve'),
-    c.where ? h('p', { class: 'muted' }, 'From ', h('strong', null, c.where), c.askedBy ? ' · asked by ' + c.askedBy : '') : null,
-    h('label', null, 'Title', h('input', { value: c.title, maxlength: 200, oninput: set('title'), placeholder: 'e.g. Does check-in work without internet?' })),
-    h('label', null, 'Their question', h('textarea', { rows: 3, maxlength: 4000, oninput: set('question'), value: c.question })),
-    c.target ? null : h('label', null, 'Asked by (optional)', h('input', { value: c.askedBy, maxlength: 200, oninput: set('askedBy') })),
-    h('label', null, 'Your answer', h('textarea', { id: 'dec-answer', rows: 8, maxlength: 8000, oninput: set('answer'), value: c.answer, placeholder: 'Plain words, as you’d explain it to them. Blank lines start new paragraphs.' })),
-    h('div', { class: 'dec-row' },
-      h('label', null, 'Part of', h('select', { onchange: set('plan') }, [['essentials', 'Their ' + TIERS.base.name + ' plan'], ['upgrade', 'A future upgrade'], ['', 'Doesn’t apply']].map(([v, l]) => h('option', { value: v, selected: c.plan === v }, l)))),
-      h('label', null, 'Show a preview', h('select', { onchange: set('preview') }, SCREENS.map(([v, l]) => h('option', { value: v, selected: c.preview === v }, l))))),
-    c.id ? h('label', null, 'What changed? (optional, shown to Lakeville)', h('input', { value: c.note || '', maxlength: 2000, oninput: set('note') })) : null,
-    h('small', null, c.id ? 'Changing the answer, plan or preview asks Lakeville to approve again.' : 'Previews show one screen with sample data and nothing from future upgrades.'),
-    D.error ? h('p', { class: 'error', role: 'alert' }, D.error) : null,
-    h('div', { class: 'dactions' }, h('button', { type: 'button', class: 'primary', disabled: D.busy, onclick: save }, D.busy ? 'Saving…' : c.id ? 'Save' : 'Post for approval'), h('button', { type: 'button', class: 'quiet', onclick: () => { D.compose = null; renderMain(); } }, 'Cancel')));
+      h('div', { class: 'dec-progress-top' }, h('strong', null, 'Planning progress'), h('span', null, total ? done + ' of ' + total + ' approved or answered' : 'Nothing yet')),
+      h('div', { class: 'dec-bar' }, h('span', { style: 'width:' + (total ? Math.round(done / total * 100) : 0) + '%' })),
+      h('p', null, owner ? 'Use “Respond” beside any Lakeville answer to reply with a chart. Lakeville approves each row inside the question.' : 'DBY replies inside each question, under the “DBY’s response” tab. Approve each row or respond to it. Approved rows are what DBY builds.')),
+    D.list === null ? h('p', { role: 'status' }, 'Loading…') : !ts.length ? h('div', { class: 'dec-empty' }, owner ? 'No responses yet.' : 'Nothing to review yet.') :
+    h('div', { class: 'dec-summary' }, ts.map(t => {
+      const rows = rowsOf(t), asks = asksOf(t), ok = rows.filter(r => r.status === 'approved').length, resp = rows.filter(r => r.status === 'changes').length, open = asks.filter(a => a.status !== 'answered').length;
+      const needs = groupOf(t).some(owner ? ownerNeeds : lakeNeeds);
+      return h('button', { type: 'button', class: 'dec-sumrow' + (needs ? ' needs' : ''), onclick: () => goQuestion(t, open && !owner && !rows.some(lakeNeeds) ? 'ask' : 'resp') },
+        h('span', { class: 'dec-sumq' }, h('strong', null, whereFor(t)), groupOf(t)[0]?.asked_by ? h('small', null, 'From ' + groupOf(t)[0].asked_by) : null),
+        h('span', { class: 'dec-sumst' }, rows.length ? ok + ' of ' + rows.length + ' approved' : '', resp ? ' · ' + resp + ' responded' : '', asks.length ? ' · DBY asks: ' + (open ? open + ' open' : 'answered') : ''),
+        h('span', { class: 'dec-sumgo' }, needs ? (owner ? 'Needs you →' : 'Review →') : 'Open →'));
+    })));
 }
 
 /* ---------- who's been here (owner only) ---------- */
