@@ -46,7 +46,7 @@ const SCHEMA = [
 ];
 let schemaReady = null;
 // Columns added after launch: ALTER fails harmlessly once the column exists.
-const ADDED_COLUMNS = ['ALTER TABLE planning_sections ADD COLUMN field_by TEXT', "ALTER TABLE scope_flags ADD COLUMN status TEXT DEFAULT 'live' NOT NULL", 'ALTER TABLE scope_flags ADD COLUMN why TEXT', 'ALTER TABLE scope_flags ADD COLUMN source TEXT', "ALTER TABLE decisions ADD COLUMN kind TEXT DEFAULT 'row' NOT NULL", 'ALTER TABLE decisions ADD COLUMN ord INTEGER DEFAULT 0 NOT NULL'];
+const ADDED_COLUMNS = ['ALTER TABLE planning_sections ADD COLUMN field_by TEXT', "ALTER TABLE scope_flags ADD COLUMN status TEXT DEFAULT 'live' NOT NULL", 'ALTER TABLE scope_flags ADD COLUMN why TEXT', 'ALTER TABLE scope_flags ADD COLUMN source TEXT', "ALTER TABLE decisions ADD COLUMN kind TEXT DEFAULT 'row' NOT NULL", 'ALTER TABLE decisions ADD COLUMN ord INTEGER DEFAULT 0 NOT NULL', "ALTER TABLE decisions ADD COLUMN feature TEXT DEFAULT '' NOT NULL"];
 function ensureSchema(db) {
   if (!schemaReady) schemaReady = db.batch(SCHEMA.map(s => db.prepare(s)))
     .then(() => Promise.all(ADDED_COLUMNS.map(sql => db.prepare(sql).run().catch(() => null))))
@@ -366,8 +366,9 @@ async function decisionsGet(env, user) {
 function decisionInput(p) {
   const str = (v, max, req) => typeof v === 'string' && v.length <= max && (!req || v.trim());
   const kind = p.kind === 'ask' ? 'ask' : 'row';
+  if (p.feature && !MODEL.FEATURE_SCREENS[p.feature]) return null;
   if (!str(p.title, 1000, true) || !str(p.question ?? '', 4000) || !str(p.answer ?? '', 8000, kind === 'row') || (p.ord != null && !Number.isInteger(p.ord)) || (p.askedBy != null && !str(p.askedBy, 200)) || (p.target != null && !str(p.target, 200)) || !DEC_PLANS.includes(p.plan ?? '') || !DEC_SCREENS.includes(p.preview ?? '')) return null;
-  return { kind, ord: p.ord || 0, title: p.title.trim(), question: (p.question || '').trim(), answer: (p.answer || '').trim(), askedBy: (p.askedBy || '').trim() || null, target: (p.target || '').trim() || null, plan: p.plan || '', preview: p.preview || '' };
+  return { feature: p.feature || '', kind, ord: p.ord || 0, title: p.title.trim(), question: (p.question || '').trim(), answer: (p.answer || '').trim(), askedBy: (p.askedBy || '').trim() || null, target: (p.target || '').trim() || null, plan: p.plan || '', preview: p.preview || '' };
 }
 const decLog = (env, id, kind, user, body, version) => env.DB.prepare('INSERT INTO decision_log (id,decision_id,kind,author_id,author_name,body,version,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), id, kind, user.userId, user.displayName, body || null, version, nowIso()).run();
 async function decisionsPost(request, env, user) {
@@ -376,7 +377,7 @@ async function decisionsPost(request, env, user) {
   if (!user.isOwner) return json({ error: 'Only DBY can post answers.' }, 403);
   const d = decisionInput(p); if (!uuid(p.id) || !d) return json({ error: 'Add a title, their question and your answer.' }, 400);
   const now = nowIso(), num = ((await env.DB.prepare('SELECT MAX(num) AS n FROM decisions').first('n')) || 0) + 1;
-  await env.DB.prepare('INSERT INTO decisions (id,num,title,question,asked_by,target,answer,plan,preview,status,version,created_at,updated_at,kind,ord) VALUES (?,?,?,?,?,?,?,?,?,\'waiting\',1,?,?,?,?)').bind(p.id, num, d.title, d.question, d.askedBy, d.target, d.answer, d.plan, d.preview, now, now, d.kind, d.ord).run();
+  await env.DB.prepare('INSERT INTO decisions (id,num,title,question,asked_by,target,answer,plan,preview,status,version,created_at,updated_at,kind,ord,feature) VALUES (?,?,?,?,?,?,?,?,?,\'waiting\',1,?,?,?,?,?)').bind(p.id, num, d.title, d.question, d.askedBy, d.target, d.answer, d.plan, d.preview, now, now, d.kind, d.ord, d.feature).run();
   await decLog(env, p.id, 'posted', user, null, 1);
   return json({ ok: true, num });
 }
@@ -388,7 +389,7 @@ async function decisionsPatch(request, env, user) {
   if (!old) return json({ error: 'That decision was removed.' }, 404);
   const changed = old.kind === 'ask' ? old.title !== d.title : old.answer !== d.answer || old.plan !== d.plan || old.preview !== d.preview;   // what Lakeville approves / answers
   const version = old.version + (changed ? 1 : 0);
-  await env.DB.prepare(`UPDATE decisions SET title=?, question=?, asked_by=?, target=?, answer=?, plan=?, preview=?, ord=?, version=?, updated_at=?${changed ? ", status='waiting', status_by=NULL, status_at=NULL" : ''} WHERE id=?`).bind(d.title, d.question, d.askedBy, d.target, d.answer, d.plan, d.preview, d.ord, version, nowIso(), p.id).run();
+  await env.DB.prepare(`UPDATE decisions SET title=?, question=?, asked_by=?, target=?, answer=?, plan=?, preview=?, ord=?, feature=?, version=?, updated_at=?${changed ? ", status='waiting', status_by=NULL, status_at=NULL" : ''} WHERE id=?`).bind(d.title, d.question, d.askedBy, d.target, d.answer, d.plan, d.preview, d.ord, d.feature, version, nowIso(), p.id).run();
   if (changed) await decLog(env, p.id, 'revised', user, (p.note || '').trim().slice(0, 2000), version);
   return json({ ok: true, revised: changed });
 }
@@ -411,6 +412,13 @@ async function decisionsDelete(request, env, user) {
   const id = new URL(request.url).searchParams.get('id'); if (!uuid(id)) return json({ error: 'Invalid decision.' }, 400);
   await env.DB.batch([env.DB.prepare('DELETE FROM decision_log WHERE decision_id=?').bind(id), env.DB.prepare('DELETE FROM decisions WHERE id=?').bind(id)]);
   return json({ ok: true });
+}
+
+// The app demo (/demo) asks what's planned on each screen and where each item stands. Plan features only (no Pro, no prices).
+async function demoStatus(env, user) {
+  const d = await env.DB.prepare("SELECT id, kind, title, answer, asked_by, target, status, status_by, status_at, feature FROM decisions WHERE feature != '' ORDER BY ord, num").all();
+  const base = MODEL.features.filter(f => f[3] === 'base').map(([id, name, desc]) => ({ id, name, desc, screens: MODEL.FEATURE_SCREENS[id] || [] }));
+  return json({ me: { name: user.displayName, isOwner: !!user.isOwner }, features: base, items: d.results });
 }
 
 async function flagsGet(request, env, user) {
@@ -587,6 +595,8 @@ async function handle(request, env) {
       if (method === 'PATCH') return await teamPatch(request, env, user);
       if (method === 'DELETE') return await teamDelete(request, env, user);
     }
+    if (path === '/api/demo-status' && method === 'GET') return await demoStatus(env, user);
+    if ((path === '/demo' || path === '/demo/') && method === 'GET') return page(PREVIEW_CLEAN_HTML);
     if (path === '/api/decisions') {
       if (method === 'GET') return await decisionsGet(env, user);
       if (method === 'POST') return await decisionsPost(request, env, user);

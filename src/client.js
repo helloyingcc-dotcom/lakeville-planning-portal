@@ -1,7 +1,7 @@
 /* Lakeville PTA planning portal – browser code (no framework). */
 (() => {
 'use strict';
-const {INCLUDED, AHEAD, INTEREST, MAX_EVENTS, EVENT_FIELDS, tabs: allTabs, features, steps, sections, PRIORITY, SIGNAL, TIERS, OWNER_SECTIONS, INTRO_KEY} = MODEL;
+const {FEATURE_SCREENS, INCLUDED, AHEAD, INTEREST, MAX_EVENTS, EVENT_FIELDS, tabs: allTabs, features, steps, sections, PRIORITY, SIGNAL, TIERS, OWNER_SECTIONS, INTRO_KEY} = MODEL;
 const ownerOnly = id => OWNER_SECTIONS.includes(id);
 let tabs = allTabs.filter(t => !ownerOnly(t[0]));
 const descriptions = {start:'A shared starting point for Lakeville and DBY.',decisions:'DBY’s answers to your questions. Approve each one, ask a question, or ask for changes. Approved answers are what we build.',events:'Tell us how Lakeville runs events today. Start with one or two you know well.',features:'Everything in your plan. Tell us which features matter most for your first event.',preview:'Only you can see this page. Shape the draft app here as Lakeville’s answers come in, and share it when it’s ready.',workflow:'Walk us through a real event and decide who needs access.',questions:'Help us shape the first version and understand the accounting needs.',ahead:'A few questions about what Lakeville might want one day. None of this is part of your current plan.',pro:'Only you can see this page. Sort what Lakeville asks for into the higher tier as their answers come in.'};
@@ -25,6 +25,7 @@ const ICONS = {
   send:'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
   image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/>',
   users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  external:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   pencil:'<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
   trash:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
 };
@@ -96,6 +97,7 @@ function renderShell() {
         h('span', null, 'DBY ', h('span', { class: 'muted' }, '/ Lakeville PTA')),
         h('div', { class: 'topactions' },
           h('button', { class: 'quiet comments-toggle', id: 'commentsToggle', 'aria-label': 'Team chat and questions', onclick: () => { S.commentsOpen = !S.commentsOpen; renderLayoutState(); renderPanel(); } }, icon('message'), 'Team chat & questions ', h('span', { id: 'commentTotal' })),
+          h('a', { class: 'quiet demo-link', href: '/demo', target: '_blank', rel: 'noreferrer' }, icon('external', 14), 'App demo'),
           h('button', { class: 'quiet', id: 'reloadBtn', onclick: reload }, icon('refresh'), 'Reload saved'),
           h('button', { class: 'quiet', id: 'exportBtn', onclick: download }, icon('download'), 'Export answers'))),
       h('div', { class: 'content-layout' },
@@ -1015,6 +1017,11 @@ function goQuestion(target, view) {
   const [, sec, key] = target.split(':'); if (view) D.view[target] = view; setTab(sec);
   setTimeout(() => { const el = $(fieldId(sec, key))?.closest('.field'); if (el) { el.scrollIntoView({ block: 'start' }); el.classList.add('pulse'); } }, 80);
 }
+function openFromHash() {   // links from the app demo: /#q=field:<section>:<key>&v=resp|ask
+  const m = /[#&]q=([^&]+)(?:&v=(\w+))?/.exec(location.hash); if (!m) return;
+  const target = decodeURIComponent(m[1]); history.replaceState(null, '', location.pathname);
+  if (/^field:[a-z]+:\w+$/i.test(target)) goQuestion(target, m[2] || 'resp');
+}
 function firstPending() { const f = S.me?.isOwner ? ownerNeeds : lakeNeeds, d = decList().find(f); return d ? [d.target, d.kind === 'ask' ? 'ask' : 'resp'] : null; }
 function decBanner() {
   const n = decAttention(), owner = S.me?.isOwner;
@@ -1064,11 +1071,12 @@ function decToggle(d, kind) { D.open[d.id] = D.open[d.id] === kind ? null : kind
 function responsePanel(target, rows) {
   const owner = S.me?.isOwner, waiting = rows.filter(r => r.status === 'waiting'), preview = rows.find(r => r.preview)?.preview;
   return h('div', { class: 'dec-panel', role: 'tabpanel' },
+    forLine(rows[0]),
     h('div', { class: 'dec-table', role: 'table', 'aria-label': 'DBY’s response' },
       h('div', { class: 'dec-tr dec-th', role: 'row' }, h('span', { role: 'columnheader' }, 'You asked for'), h('span', { role: 'columnheader' }, 'How we’ll do it'), h('span', { role: 'columnheader' }, owner ? 'Lakeville' : 'Your OK')),
       rows.map(r => h('div', { class: 'dec-tr st-' + r.status, role: 'row' },
         h('span', { role: 'cell', class: 'dec-ask' }, r.title),
-        h('span', { role: 'cell', class: 'dec-how' }, decParas(r.answer), r.plan ? h('span', { class: 'dplan ' + r.plan }, PLAN_SHORT[r.plan]) : null),
+        h('span', { role: 'cell', class: 'dec-how' }, decParas(r.answer), h('span', { class: 'dec-tags' }, r.plan ? h('span', { class: 'dplan ' + r.plan }, PLAN_SHORT[r.plan]) : null, r.feature && FEATURE_SCREENS[r.feature] ? h('a', { class: 'see-it', href: '/demo#screen=' + FEATURE_SCREENS[r.feature][0], target: '_blank', rel: 'noreferrer' }, 'See it in the demo →') : null)),
         h('span', { role: 'cell', class: 'dec-ok' },
           r.status === 'approved' ? h('span', { class: 'ok-by' }, '✓ ' + (r.status_by || '') , h('small', null, fmtTime(r.status_at)))
           : owner ? h('span', { class: 'st-pill st-' + r.status }, r.status === 'changes' ? '💬 Responded' : 'Waiting')
@@ -1078,14 +1086,14 @@ function responsePanel(target, rows) {
         decTalk(r) ? h('div', { class: 'dec-sub' }, decTalk(r)) : null,
         D.open[r.id] ? h('div', { class: 'dec-sub' }, D.open[r.id] === 'reply' ? decReplyBox(r, 'reply', 'Your reply', 'Send reply') : decReplyBox(r, 'changes', 'Your response to “' + r.title + '”', 'Send response')) : null))),
     !owner && waiting.length > 1 ? h('div', { class: 'dactions' }, h('button', { type: 'button', class: 'primary approve', disabled: D.busy, onclick: () => decCall(async () => { for (const r of waiting) await api('/api/decisions', jsonOpts('POST', { id: r.id, action: 'approve', version: r.version })); }) }, '✓ Approve all ' + waiting.length)) : null,
-    preview ? h('div', { class: 'dprev' }, h('div', { class: 'dprev-top' }, h('small', null, 'Try it: ' + (SCREENS.find(x => x[0] === preview)?.[1] || 'preview') + ' (sample data)'), h('a', { href: '/app-preview.html?screen=' + encodeURIComponent(preview) + '&clean=1', target: '_blank', rel: 'noreferrer' }, 'Open full size ↗')),
+    preview ? h('div', { class: 'dprev' }, h('div', { class: 'dprev-top' }, h('small', null, 'Try it: ' + (SCREENS.find(x => x[0] === preview)?.[1] || 'preview') + (preview.startsWith('parent') ? ' (phone preview, sample data)' : ' (desktop preview, sample data; phones and tablets rearrange to fit)')), h('a', { href: '/app-preview.html?screen=' + encodeURIComponent(preview) + '&clean=1', target: '_blank', rel: 'noreferrer' }, 'Open full size ↗')),
       h('iframe', { src: '/app-preview.html?screen=' + encodeURIComponent(preview) + '&clean=1', loading: 'lazy', title: 'Preview', class: 'dprev-frame' + (preview.startsWith('parent') ? ' phone' : '') })) : null,
     owner ? h('div', { class: 'dactions' }, h('button', { type: 'button', class: 'quiet', onclick: () => editResponse(target) }, '✎ Edit response')) : null,
     D.error ? h('p', { class: 'error', role: 'alert' }, D.error) : null);
 }
 function asksPanel(target, asks) {
   const owner = S.me?.isOwner;
-  return h('div', { class: 'dec-panel', role: 'tabpanel' }, asks.map(a => h('div', { class: 'dec-askcard st-' + a.status },
+  return h('div', { class: 'dec-panel', role: 'tabpanel' }, forLine(asks[0]), asks.map(a => h('div', { class: 'dec-askcard st-' + a.status },
     h('div', { class: 'dec-askq' }, h('span', { class: 'dec-q-icon', 'aria-hidden': 'true' }, '?'), h('div', null, decParas(a.title), a.answer ? h('small', null, a.answer) : null)),
     decTalk(a),
     a.status === 'answered' && !D.open[a.id] ? h('div', { class: 'dactions' }, h('span', { class: 'ok-by' }, '✓ Answered by ' + (a.status_by || '')), owner ? h('button', { type: 'button', class: 'mini', onclick: () => decToggle(a, 'reply') }, 'Reply') : h('button', { type: 'button', class: 'mini quietish', onclick: () => decToggle(a, 'answer') }, 'Add more')) : null,
@@ -1094,6 +1102,11 @@ function asksPanel(target, asks) {
       : owner && a.status !== 'answered' ? h('small', { class: 'muted' }, 'Waiting for Lakeville’s answer') : null)),
     owner ? h('div', { class: 'dactions' }, h('button', { type: 'button', class: 'quiet', onclick: () => editResponse(target) }, '✎ Edit')) : null,
     D.error ? h('p', { class: 'error', role: 'alert' }, D.error) : null);
+}
+function forLine(d) {
+  if (!d?.asked_by) return null;
+  const mine = d.asked_by === S.me?.name;
+  return h('div', { class: 'dec-for' + (mine ? ' mine' : '') }, mine ? 'For you' : 'For ' + d.asked_by, mine ? '' : ' · anyone on the team can approve');
 }
 /* owner: write or edit the chart */
 function startResponse(tab, f) {
@@ -1105,17 +1118,22 @@ function startResponse(tab, f) {
 function editResponse(target) {
   const g = groupOf(target);
   D.compose = { target, askedBy: g[0]?.asked_by || '', question: g[0]?.question || '', preview: g.find(r => r.preview)?.preview || '',
-    rows: g.filter(d => d.kind !== 'ask').map(d => ({ id: d.id, title: d.title, answer: d.answer, plan: d.plan, orig: d })), asks: g.filter(d => d.kind === 'ask').map(d => ({ id: d.id, title: d.title, answer: d.answer, orig: d })), removed: [] };
+    rows: g.filter(d => d.kind !== 'ask').map(d => ({ id: d.id, title: d.title, answer: d.answer, plan: d.plan, feature: d.feature || '', orig: d })), asks: g.filter(d => d.kind === 'ask').map(d => ({ id: d.id, title: d.title, answer: d.answer, feature: d.feature || '', orig: d })), removed: [] };
   if (!D.compose.rows.length) D.compose.rows.push({ title: '', answer: '', plan: 'essentials' });
   D.view[target] = 'resp'; D.error = ''; renderDecZones();
+}
+function featureSelect(r) {
+  return h('select', { onchange: e => { r.feature = e.target.value; }, 'aria-label': 'Shows in the app demo as', title: 'Shows in the app demo as' },
+    h('option', { value: '', selected: !r.feature }, 'Demo: not shown'), features.filter(f => f[3] === 'base').map(([id, name]) => h('option', { value: id, selected: r.feature === id }, 'Demo: ' + name)));
 }
 function decComposer(target) {
   const c = D.compose, redraw = () => fill(document.querySelector(`.dec-zone[data-dec="${target}"]`), decZone(target));
   const rowEd = (r, i, list, isAsk) => h('div', { class: 'dec-edrow' + (isAsk ? ' ask' : '') },
-    isAsk ? h('textarea', { rows: 2, maxlength: 1000, placeholder: 'Your question for Lakeville', value: r.title, oninput: e => { r.title = e.target.value; } })
+    isAsk ? h('span', { class: 'dec-edsel' }, h('textarea', { rows: 2, maxlength: 1000, placeholder: 'Your question for Lakeville', value: r.title, oninput: e => { r.title = e.target.value; } }), featureSelect(r))
       : [h('input', { maxlength: 300, placeholder: 'You asked for…', value: r.title, oninput: e => { r.title = e.target.value; } }),
          h('textarea', { rows: 2, maxlength: 8000, placeholder: 'How we’ll do it', value: r.answer, oninput: e => { r.answer = e.target.value; } }),
-         h('select', { onchange: e => { r.plan = e.target.value; }, 'aria-label': 'Part of' }, [['essentials', 'Your plan'], ['upgrade', 'Future upgrade'], ['', '—']].map(([v, l]) => h('option', { value: v, selected: r.plan === v }, l)))],
+         h('span', { class: 'dec-edsel' }, h('select', { onchange: e => { r.plan = e.target.value; }, 'aria-label': 'Part of' }, [['essentials', 'Your plan'], ['upgrade', 'Future upgrade'], ['', '—']].map(([v, l]) => h('option', { value: v, selected: r.plan === v }, l))),
+           featureSelect(r))],
     h('button', { type: 'button', class: 'mini', title: 'Remove', onclick: () => { if (r.id) c.removed.push(r.id); list.splice(i, 1); redraw(); } }, '✕'));
   const save = () => decCall(async () => {
     const rows = c.rows.filter(r => r.title.trim() || r.answer.trim()), asks = c.asks.filter(a => a.title.trim());
@@ -1123,12 +1141,12 @@ function decComposer(target) {
     if (rows.some(r => !r.title.trim() || !r.answer.trim())) throw new Error('Each row needs “You asked for” and “How we’ll do it”.');
     const base = { target: c.target, askedBy: c.askedBy, question: c.question };
     let ord = 0;
-    for (const r of rows) { const body = { ...base, kind: 'row', title: r.title, answer: r.answer, plan: r.plan, preview: ord === 0 ? c.preview : '', ord: ord++ };
+    for (const r of rows) { const body = { ...base, kind: 'row', title: r.title, answer: r.answer, plan: r.plan, feature: r.feature || '', preview: ord === 0 ? c.preview : '', ord: ord++ };
       if (!r.id) await api('/api/decisions', jsonOpts('POST', { id: crypto.randomUUID(), ...body }));
-      else if (r.orig.title !== body.title || r.orig.answer !== body.answer || r.orig.plan !== body.plan || r.orig.preview !== body.preview || r.orig.ord !== body.ord) await api('/api/decisions', jsonOpts('PATCH', { id: r.id, ...body })); }
-    for (const a of asks) { const body = { ...base, kind: 'ask', title: a.title, answer: a.answer || '', plan: '', preview: '', ord: ord++ };
+      else if (r.orig.title !== body.title || r.orig.answer !== body.answer || r.orig.plan !== body.plan || r.orig.preview !== body.preview || r.orig.ord !== body.ord || (r.orig.feature || '') !== body.feature) await api('/api/decisions', jsonOpts('PATCH', { id: r.id, ...body })); }
+    for (const a of asks) { const body = { ...base, kind: 'ask', title: a.title, answer: a.answer || '', plan: '', feature: a.feature || '', preview: '', ord: ord++ };
       if (!a.id) await api('/api/decisions', jsonOpts('POST', { id: crypto.randomUUID(), ...body }));
-      else if (a.orig.title !== body.title || a.orig.answer !== body.answer || a.orig.ord !== body.ord) await api('/api/decisions', jsonOpts('PATCH', { id: a.id, ...body })); }
+      else if (a.orig.title !== body.title || a.orig.answer !== body.answer || a.orig.ord !== body.ord || (a.orig.feature || '') !== body.feature) await api('/api/decisions', jsonOpts('PATCH', { id: a.id, ...body })); }
     for (const id of c.removed || []) await api('/api/decisions?id=' + id, { method: 'DELETE' });
   }, () => { D.compose = null; D.view[target] = 'resp'; });
   return h('div', { class: 'dec-panel dec-compose', role: 'tabpanel' },
@@ -1201,5 +1219,5 @@ setInterval(() => { syncPlan(); pollList(); pollThread(); if (++flagTick % 3 ===
 renderShell();
 api('/api/me').then(me => { S.me = me; tabs = me.isOwner ? allTabs : allTabs.filter(t => !ownerOnly(t[0])); renderNav(); renderMain(); renderPanel(); pollTeam(); }).catch(e => { S.error = errMsg(e, 'Could not check your sign-in.'); renderMain(); });
 load();
-pollFlags(); pollDecisions();
+pollFlags(); pollDecisions().then(() => setTimeout(openFromHash, 600));
 })();

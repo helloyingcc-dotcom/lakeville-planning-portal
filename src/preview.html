@@ -114,6 +114,23 @@ tr.click{cursor:pointer}tr.click:hover td{background:#f8f9fc}
 }
 body.single .proto-bar .switch,body.single .side>button{display:none}
 body.single .side{width:auto}
+.demo-toggle{position:fixed;right:16px;bottom:16px;z-index:60;border:0;border-radius:999px;background:#1f2f57;color:#fff;padding:11px 16px;font:600 14px/1 inherit;font-family:inherit;box-shadow:0 6px 20px rgba(20,30,60,.25);cursor:pointer;display:flex;gap:8px;align-items:center}
+.demo-toggle .n{background:#e6b422;color:#1f2f57;border-radius:999px;padding:2px 8px;font-size:12px}
+.demo-panel{position:fixed;top:0;right:0;bottom:0;width:360px;max-width:100%;z-index:70;background:#fff;box-shadow:-8px 0 30px rgba(20,30,60,.18);display:flex;flex-direction:column}
+.demo-panel header{display:flex;justify-content:space-between;align-items:start;gap:10px;padding:16px 16px 10px;border-bottom:1px solid #e6eaf2}
+.demo-panel header h2{margin:0;font-size:17px}.demo-panel header p{margin:4px 0 0;font-size:12px;color:#6b7383}
+.demo-list{overflow:auto;padding:12px 16px 24px;display:grid;gap:10px;align-content:start}
+.demo-feat{border:1px solid #e3e7f0;border-radius:12px;padding:12px;display:grid;gap:6px}
+.demo-feat h3{margin:0;font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.demo-feat>p{margin:0;font-size:13px;color:#4b5465}
+.demo-chip{font-size:11px;font-weight:700;border-radius:999px;padding:3px 8px;white-space:nowrap}
+.c-approved{background:#e6f5ec;color:#1f6b3a}.c-waiting{background:#fff3dc;color:#8a5a00}.c-changes{background:#fff0e6;color:#9a3f0b}.c-ask{background:#e9eefc;color:#2d4fa3}.c-planned{background:#f0f2f6;color:#4b5465}
+.demo-item{border-top:1px dashed #e3e7f0;padding-top:6px;font-size:12.5px;display:grid;gap:3px}
+.demo-item.mine{background:#fffbea;margin:0 -6px;padding:6px;border-radius:8px;border-top:0}
+.demo-item a{color:#2d4fa3;font-weight:600;text-decoration:none}
+.demo-other{font-size:12px;color:#6b7383;margin:6px 0 0}
+.demo-about{margin:0;font-size:12.5px;color:#4b3b0f;background:#fff8e6;border:1px solid #f1dfb2;border-radius:10px;padding:10px 12px}
+@media(max-width:700px){.demo-panel{width:100%}}
 </style>
 </head>
 <body>
@@ -125,6 +142,7 @@ body.single .side{width:auto}
   </div>
 </div>
 <div id="app"></div>
+<div id="demo-ui"></div>
 <script>
 'use strict';
 const LION = '__LION_DATA__';
@@ -683,6 +701,51 @@ if (SCREEN) {   // lock to one screen: hide the menu and the PTA/Parent switch
   document.body.classList.add('single');
 }
 render();
+/* ---------- app demo (/demo): live plan status beside each screen ---------- */
+const DEMO = location.pathname.replace(/\/$/, '') === '/demo';
+const DM = { open: false, data: null };
+const screenKey = () => S.mode === 'parent' ? 'parent:' + S.pv : S.view;
+const SCREEN_NAMES = Object.fromEntries([...NAV.map(n => [n[0], n[2]]), ['parent:events', 'Parent · Events'], ['parent:tickets', 'Parent · My tickets']]);
+function goHash() {
+  const m = /screen=([^&]+)/.exec(location.hash); if (!m) return;
+  const [a, b] = decodeURIComponent(m[1]).split(':');
+  if (a === 'parent') { S.mode = 'parent'; S.pv = b || 'events'; } else { S.mode = 'admin'; S.view = a; }
+  S.open = null; render();
+}
+function itemStatus(it) { return it.kind === 'ask' ? (it.status === 'answered' ? ['approved', 'Answered'] : ['ask', 'Needs an answer']) : it.status === 'approved' ? ['approved', 'Approved'] : it.status === 'changes' ? ['changes', 'Responded'] : ['waiting', 'Waiting for OK']; }
+function featStatus(items) {
+  if (!items.length) return ['planned', '📝 Planned'];
+  if (items.some(i => i.kind === 'ask' && i.status !== 'answered')) return ['ask', '❓ Depends on your answer'];
+  if (items.some(i => i.kind !== 'ask' && i.status === 'waiting')) return ['waiting', '⏳ Waiting for OK'];
+  if (items.some(i => i.status === 'changes')) return ['changes', '💬 Being discussed'];
+  return ['approved', '✅ Approved'];
+}
+const mineIt = it => DM.data && it.asked_by && it.asked_by === DM.data.me.name;
+const needsMe = it => mineIt(it) && (it.kind === 'ask' ? it.status !== 'answered' : it.status === 'waiting');
+const qLink = it => '/#q=' + encodeURIComponent(it.target) + '&v=' + (it.kind === 'ask' ? 'ask' : 'resp');
+function renderDemo() {
+  if (!DEMO || !DM.data) return;
+  const key = screenKey(), feats = DM.data.features.filter(f => f.screens.includes(key));
+  const forMe = DM.data.items.filter(needsMe).length;
+  const itemsOf = f => DM.data.items.filter(i => i.feature === f.id).sort((a, b) => mineIt(b) - mineIt(a));
+  const who = it => mineIt(it) ? 'For you' : it.asked_by ? 'For ' + it.asked_by : 'For the Lakeville team';
+  $('#demo-ui').innerHTML = !DM.open ? `<button class="demo-toggle" data-act="demo-open" aria-label="What’s on this screen">📋 What’s on this screen${forMe ? ` <span class="n">${forMe} for you</span>` : ''}</button>` :
+    `<aside class="demo-panel" aria-label="What’s on this screen"><header><div><h2>What’s on this screen</h2><p>${esc(SCREEN_NAMES[key] || '')} · what’s planned for Lakeville and where each item stands</p></div><button class="btn ghost sm" data-act="demo-close">Close</button></header>
+    <div class="demo-list"><p class="demo-about"><b>What this demo is for:</b> working out the flow together: what happens in what order, who does what, and what each screen needs. The real app is built from these screens, so it will look like this, with Lakeville’s logo and colors. Wording and small details may still change as we go.</p>${feats.length ? feats.map(f => { const its = itemsOf(f), [c, label] = featStatus(its);
+      return `<div class="demo-feat"><h3>${esc(f.name)} <span class="demo-chip c-${c}">${label}</span></h3><p>${esc(f.desc)}</p>
+      ${its.map(it => { const [ic, il] = itemStatus(it); return `<div class="demo-item${mineIt(it) ? ' mine' : ''}"><span><b>${esc(who(it))}</b> · ${esc(it.title)}</span><span><span class="demo-chip c-${ic}">${il}${it.status === 'approved' && it.status_by ? ' by ' + esc(it.status_by) : ''}</span> ${it.target ? `<a href="${qLink(it)}" target="_blank" rel="noreferrer">Go to question →</a>` : ''}</span></div>`; }).join('')}</div>`; }).join('')
+      : '<p class="muted">This screen supports the features on the other screens. Use the menu to look around.</p>'}
+      <p class="demo-other">💻 You’re looking at the desktop preview. On phones and tablets the same screens rearrange to fit the smaller screen, so they’ll look a little different, but the features are the same. (The Parent view shows the phone version.)</p>
+      <p class="demo-other">Something missing or unclear? Ask DBY in the planning portal.</p></div></aside>`;
+}
+async function loadDemo() { try { const r = await fetch('/api/demo-status'); if (r.ok) { DM.data = await r.json(); renderDemo(); } } catch {} }
+if (DEMO) {
+  document.querySelector('.proto-bar strong').textContent = 'App demo';
+  document.querySelector('.proto-bar .hide-sm').textContent = '· sample data, nothing is saved · this is the desktop preview: on phones and tablets the same screens rearrange to fit';
+  const r0 = render; render = function () { r0(); renderDemo(); };
+  document.addEventListener('click', e => { const t = e.target.closest('[data-act="demo-open"],[data-act="demo-close"]'); if (t) { DM.open = t.dataset.act === 'demo-open'; renderDemo(); } });
+  addEventListener('hashchange', goHash); goHash(); loadDemo(); setInterval(() => { if (!document.hidden) loadDemo(); }, 20000);
+}
 </script>
 </body>
 </html>

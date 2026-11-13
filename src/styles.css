@@ -299,3 +299,9 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .dec-sumrow.needs{border-left:4px solid #c2410c}
 .dec-sumq{display:grid}.dec-sumq small{color:#6b7383}.dec-sumst{font-size:13px;color:#4b5465}.dec-sumgo{font-size:13px;font-weight:600;color:#1f2f57}
 @media(max-width:760px){.dec-tr{grid-template-columns:1fr}.dec-ok{justify-content:flex-start}.dec-th{display:none}.dec-edhead{display:none}.dec-edrow{grid-template-columns:1fr}.dec-sumrow{grid-template-columns:1fr}}
+
+.demo-link{display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.dec-for{font-size:12px;color:#6b7383}.dec-for.mine{color:#8a5a00;font-weight:700}
+.dec-tags{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.see-it{font-size:12px;font-weight:600;color:#2d4fa3;text-decoration:none}
+.dec-edsel{display:grid;gap:6px}
