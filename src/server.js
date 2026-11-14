@@ -434,7 +434,7 @@ async function queueOwner(env, user, text, link) {
 }
 async function sendEmail(env, { to, subject, html, text, replyTo }) {
   const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: env.NOTIFY_FROM || 'Ying at DBY <updates@dbyshop.com>', to: [].concat(to), subject, html, text, ...(replyTo ? { reply_to: replyTo } : {}) }) });
+    body: JSON.stringify({ from: env.NOTIFY_FROM || 'Ying at DBY <updates@mail.dbyshop.com>', to: [].concat(to), subject, html, text, ...(replyTo ? { reply_to: replyTo } : {}) }) });
   if (!r.ok) { const body = await r.text().catch(() => ''); console.error('resend', r.status, body); throw new Error('Email service said ' + r.status + ': ' + clip(body, 200)); }
   return r.json().catch(() => ({}));
 }
