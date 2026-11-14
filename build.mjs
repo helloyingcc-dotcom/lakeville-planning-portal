@@ -23,7 +23,8 @@ writeFileSync(new URL('./worker.js', import.meta.url), worker);
 const logo = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#1f2f57"/><path d="M32 14 8 26l24 12 18-9v13h4V26z" fill="#fff"/><path d="M18 36v8c0 4 6 8 14 8s14-4 14-8v-8l-14 7z" fill="#f2b84b"/></svg>');
 const share = previewClean.replace(lion, () => logo)
   .replace(/Lakeville Events App · Essentials prototype/g, 'PTA Events App · preview by Designs By Ying')
-  .replace(/Lakeville PTA/g, 'Your School PTA').replace(/lakeville-pta/g, 'your-school-pta').replace(/Lakeville Elementary/g, 'Your School').replace(/Lakeville/g, 'your PTA').replace(/lakeville/g, 'your-school');
+  .replace(/Lakeville PTA/g, 'Your School PTA').replace(/lakeville-pta/g, 'your-school-pta').replace(/Lakeville Elementary/g, 'Your School').replace(/Lakeville/g, 'your PTA').replace(/lakeville/g, 'your-school')
+  .replace(/Sweetheart Dance/g, 'Spring Dance').replace(/Car Show/g, 'Spring Carnival').replace(/Literacy Night/g, 'Science Night');
 if (/lakeville/i.test(share)) throw new Error('share preview still mentions Lakeville');
 import('node:fs').then(fs => { fs.mkdirSync(new URL('./dist/', import.meta.url), { recursive: true }); fs.writeFileSync(new URL('./dist/share-preview.html', import.meta.url), share); });
 console.log('worker.js', worker.length, 'bytes, version', version);

@@ -150,6 +150,12 @@ body.single .side{width:auto}
 <script>
 'use strict';
 const LION = '__LION_DATA__';
+// Save a file: on a hosted Claude page use its downloads capability; elsewhere a normal browser download.
+async function saveFile(name, data, type, done) {
+  try { const dl = window.claude?.use ? await window.claude.use('downloads') : null;
+    if (dl) { await dl.save({ filename: name, data }); toast(done); return; } } catch (e) { if (window.claude?.use) { toast('Download cancelled'); return; } }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type })); a.download = name; document.body.append(a); a.click(); a.remove(); toast(done);
+}
 /* ---------------- sample data (fictional) ---------------- */
 const QTYPES = { text: 'Short answer', number: 'Number', select: 'Dropdown', check: 'Checkbox' };
 const EVENTS = [
@@ -622,9 +628,9 @@ document.addEventListener('click', e => {
       fams.push(w); toast(`${name} added and checked in${m ? ' · paid ' + m : ' · not paid'}`); return; }
     case 'csv': { const list = famsOf(S.ev), extraCols = [...new Set(list.flatMap(f => Object.keys(f.other || {})))];
       const rows = [['Family', 'Email', 'Students', 'Grades', 'Teachers', 'Adults', 'Kids', 'People', 'Checked in', 'Pizza orders', 'Payment', 'Method', 'Amount', 'Paid at door (collected by)', 'Ticket', ...extraCols]].concat(list.map(f => [f.parent, f.email, f.members.filter(m => m.grade).map(m => m.name).join('; '), f.members.filter(m => m.grade).map(m => m.grade).join('; '), f.members.filter(m => m.teacher).map(m => m.teacher).join('; '), adultsOf(f), kidsOf(f), people(f), inCount(f), f.pizza || 0, f.status, f.method, amount(f), f.door ? f.door.method + ' ' + money(f.door.amount) + ' · ' + f.door.by + ' · ' + f.door.at : '', f.code, ...extraCols.map(c => f.other?.[c] || '')]));
-      const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = evOf(S.ev).name.replace(/\s+/g, '-').toLowerCase() + '-registrations.csv'; document.body.append(a); a.click(); a.remove(); toast('CSV downloaded'); return; }
+      const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n'); saveFile(evOf(S.ev).name.replace(/\s+/g, '-').toLowerCase() + '-registrations.csv', csv, 'text/csv', 'CSV downloaded'); return; }
     case 'pv': S.pv = v; S.pev = null; break;
-    case 'ics': { const ev = evOf(v), a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([icsFor(ev)], { type: 'text/calendar' })); a.download = ev.id + '-lakeville-pta.ics'; document.body.append(a); a.click(); a.remove(); toast('Added to your calendar'); return; }
+    case 'ics': { const ev = evOf(v); saveFile(ev.id + '-lakeville-pta.ics', icsFor(ev), 'text/calendar', 'Added to your calendar'); return; }
     case 'editwho': S.editWho = v || null; break;
     case 'premove': { const i = +t.dataset.i, m = f.members[i]; if (!m || f.members.length < 2) return; const before = amount(f); f.members.splice(i, 1); const after = amount(f);
       (f.removed ||= []).push({ name: m.name, at: nowTime() }); if (f.status === 'verified' && before > after) f.refundDue = (f.refundDue || 0) + (before - after);
