@@ -401,6 +401,11 @@ async function decisionsPatch(request, env, user) {
   return json({ ok: true, revised: changed });
 }
 async function decisionRespond(p, env, user) {
+  if (p.action === 'editlog') {   // fix your own message (DBY replies or a Lakeville response), keeps its place in the conversation
+    if (!uuid(p.id) || !uuid(p.logId) || typeof p.note !== 'string' || !p.note.trim() || p.note.length > 4000) return json({ error: 'Invalid edit.' }, 400);
+    const row = await env.DB.prepare("UPDATE decision_log SET body=? WHERE id=? AND decision_id=? AND author_id=? AND kind IN ('reply','changes','question','answer') RETURNING id").bind(p.note.trim(), p.logId, p.id, user.userId).first();
+    return row ? json({ ok: true }) : json({ error: 'You can only edit your own messages.' }, 403);
+  }
   if (!uuid(p.id) || !['approve', 'changes', 'question', 'reply', 'answer'].includes(p.action) || (p.note != null && (typeof p.note !== 'string' || p.note.length > 4000))) return json({ error: 'Invalid response.' }, 400);
   const note = (p.note || '').trim();
   if (['changes', 'question', 'reply', 'answer'].includes(p.action) && !note) return json({ error: p.action === 'changes' ? 'Write your response.' : p.action === 'answer' ? 'Write your answer.' : 'Write your message.' }, 400);
