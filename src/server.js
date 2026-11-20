@@ -494,6 +494,37 @@ async function notifyPost(request, env, user) {
   return json({ ok: true, to: name });
 }
 
+// Owner: one email per Lakeville person listing everything waiting for them (DBY replied to them, or DBY's rows/questions on their answers still open)
+async function notifyAllPost(request, env, user) {
+  if (!user.isOwner) return json({ error: 'Only DBY can send this.' }, 403);
+  let p = {}; try { p = await readJson(request, 1000); } catch {}
+  const decs = (await env.DB.prepare('SELECT * FROM decisions').all()).results;
+  const logs = (await env.DB.prepare('SELECT * FROM decision_log ORDER BY created_at').all()).results;
+  const by = {}; for (const l of logs) (by[l.decision_id] ||= []).push(l);
+  const per = {};   // name -> target -> {rows, asks, replies}
+  const add = (name, d, k) => { if (!name || /^ying$/i.test(name)) return; const t = ((per[name] ||= {})[d.target] ||= { rows: 0, asks: 0, replies: 0 }); t[k]++; };
+  for (const d of decs) {
+    const talk = (by[d.id] || []).filter(l => ['changes', 'question', 'answer', 'reply'].includes(l.kind)), last = talk[talk.length - 1];
+    if (last?.kind === 'reply') { const lake = [...new Set(talk.filter(l => l.kind !== 'reply').map(l => l.author_name))]; (lake.length ? lake : [d.asked_by]).forEach(n => add(n, d, 'replies')); }
+    else if (!last && d.status === 'waiting') add(d.asked_by, d, d.kind === 'ask' ? 'asks' : 'rows');
+  }
+  const base = portalUrl(env), out = [];
+  for (const [name, targets] of Object.entries(per)) {
+    const to = await personEmail(env, name), first = name.split(' ')[0];
+    const items = Object.entries(targets).map(([t, c]) => { const { label, page } = fieldLabel(t);
+      const bits = [c.replies && (c.replies === 1 ? 'DBY replied to your comment' : `DBY replied to ${c.replies} of your comments`), c.rows && `${c.rows} item${c.rows > 1 ? 's' : ''} to approve`, c.asks && `${c.asks} question${c.asks > 1 ? 's' : ''} for you`].filter(Boolean).join(' · ');
+      return { label: label.replace(/^Event \d+ · /, ''), page, bits, link: base + '/#q=' + encodeURIComponent(t) + '&v=resp' }; });
+    out.push({ name, to, items: items.map(i => i.label + ' — ' + i.bits) });
+    if (p.send && to && env.RESEND_API_KEY) {
+      await sendEmail(env, { to, replyTo: ownerEmails(env)[0], subject: `${items.length === 1 ? '1 item is' : items.length + ' items are'} ready for your response`,
+        html: emailShell(`<p>Hi ${esc(first)},</p><p>These are ready for your response on the Lakeville planning portal:</p>`, items.map(i => `<a href="${esc(i.link)}" style="color:#4f46e5;font-weight:600">${esc(i.label)}</a>${i.page ? ' <span style="color:#6b7280">(' + esc(i.page) + ')</span>' : ''}<br><span style="color:#6b7280;font-size:13px">${esc(i.bits)}</span>`), 'Open the planning portal', base + '/', '— Ying, DBY'),
+        text: `Hi ${first},\n\nThese are ready for your response on the Lakeville planning portal:\n\n${items.map(i => `- ${i.label}: ${i.bits}\n  ${i.link}`).join('\n')}\n\n— Ying, DBY` });
+      for (const t of Object.keys(targets)) await env.DB.prepare('INSERT INTO notify_sent (id,target,to_name,to_email,sent_by,sent_at) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), t, name, to, user.email, nowIso()).run();
+    }
+  }
+  return json({ ok: true, sent: !!(p.send && env.RESEND_API_KEY), people: out });
+}
+
 /* ---------------- Ask box (app demo): Lakeville asks how something works; Claude answers from what Lakeville may see ---------------- */
 // Price per million tokens (USD), for the spend log. Checked Nov 13, 2026.
 const AI_RATES = { 'claude-sonnet-5-5': [2, 10], 'claude-haiku-5-5': [0.1, 0.5] };
@@ -757,6 +788,7 @@ async function handle(request, env) {
     if (path === '/api/ask' && method === 'POST') return await askPost(request, env, user);
     if (path === '/api/ask/want' && method === 'POST') return await askWant(request, env, user);
     if (path === '/api/notify' && method === 'POST') return await notifyPost(request, env, user);
+    if (path === '/api/notify-all' && method === 'POST') return await notifyAllPost(request, env, user);
     if (path === '/api/ai-usage' && method === 'GET') return await aiUsage(env, user);
     if ((path === '/demo' || path === '/demo/') && method === 'GET') return page(PREVIEW_CLEAN_HTML);
     if (path === '/api/decisions') {

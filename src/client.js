@@ -989,7 +989,7 @@ async function flagCall(fn) {
 
 /* ---------- DBY's response inside each question: a chart Lakeville approves row by row ---------- */
 // Each question box gets tabs: [<name>'s answer] [DBY's response] [DBY asks]. Rows ('row') get Approve / Respond; questions ('ask') get typed answers.
-const D = { list: null, last: '', view: {}, compose: null, busy: false, error: '', open: {}, drafts: {}, notify: null, notifyState: {} };
+const D = { list: null, last: '', view: {}, compose: null, busy: false, error: '', open: {}, drafts: {}, notify: null, notifyState: {}, all: null };
 const SCREENS = [['', 'No preview'], ['desk', 'Check-in desk'], ['pay', 'Payments'], ['regs', 'Registrations'], ['dash', 'Dashboard'], ['form', 'Sign-up form'], ['vols', 'Volunteers'], ['mail', 'Email families'], ['import', 'Import a spreadsheet'], ['review', 'Pre-event review'], ['reports', 'Reports & export'], ['emails', 'Automated emails'], ['parent:events', 'Parent’s phone: events & sign-up'], ['parent:tickets', 'Parent’s phone: my tickets']];
 const PLAN_SHORT = { essentials: 'Your plan', upgrade: 'Future upgrade' };
 const decList = () => D.list || [];
@@ -1204,12 +1204,29 @@ function startProgress() {
     h('div', { class: 'dec-bar' }, h('span', { style: 'width:' + Math.round(done / total * 100) + '%' })),
     h('button', { class: 'linkish', type: 'button', style: 'justify-self:start;font-size:13px', onclick: () => setTab('decisions') }, 'See the summary →'));
 }
+// owner: preview, then send one email per Lakeville person listing everything waiting for them
+function notifyAllBox() {
+  const st = D.all || {};
+  const run = async send => { D.all = { ...st, busy: true }; renderDecisionsSafe();
+    try { const r = await api('/api/notify-all', jsonOpts('POST', { send })); D.all = { people: r.people, sent: r.sent }; } catch (e) { D.all = { error: errMsg(e, 'Could not prepare the emails.') }; }
+    renderDecisionsSafe(); };
+  return h('div', { class: 'notify-box' },
+    h('div', { class: 'notify-head' }, h('strong', null, '📣 Email everyone their updates'), h('small', { class: 'muted' }, 'One email per person, listing everything waiting for them, with links.')),
+    st.people ? h('ul', { class: 'notify-list' }, st.people.map(p => h('li', null, h('b', null, p.name), p.to ? '' : ' (no email on file)', h('ul', null, p.items.map(i => h('li', null, i)))))) : null,
+    st.people && !st.people.length ? h('p', { class: 'muted' }, 'Nothing is waiting for Lakeville right now.') : null,
+    st.sent ? h('p', { class: 'notify-sent' }, '✓ Sent') : h('div', { class: 'dactions' },
+      h('button', { type: 'button', disabled: st.busy, onclick: () => run(false) }, st.people ? 'Refresh preview' : 'Preview'),
+      st.people?.length ? h('button', { type: 'button', class: 'primary', disabled: st.busy, onclick: () => run(true) }, 'Send ' + st.people.filter(p => p.to).length + ' emails') : null),
+    st.error ? h('p', { class: 'error', role: 'alert' }, st.error) : null);
+}
+function renderDecisionsSafe() { if (S.tab === 'decisions') renderMain(); }
 function decisionsPage() {
   const { done, total } = progressNumbers(), owner = S.me?.isOwner, ts = targets();
   return h('div', { id: 'decisions' },
     h('section', { class: 'dec-progress' },
       h('div', { class: 'dec-progress-top' }, h('strong', null, 'Planning progress'), h('span', null, total ? done + ' of ' + total + ' approved or answered' : 'Nothing yet')),
       h('div', { class: 'dec-bar' }, h('span', { style: 'width:' + (total ? Math.round(done / total * 100) : 0) + '%' })),
+      owner ? notifyAllBox() : null,
       h('p', null, owner ? 'Use “Respond” beside any Lakeville answer to reply with a chart. Lakeville approves each row inside the question.' : 'DBY replies inside each question, under the “DBY’s response” tab. Approve each row or respond to it. Approved rows are what DBY builds.')),
     D.list === null ? h('p', { role: 'status' }, 'Loading…') : !ts.length ? h('div', { class: 'dec-empty' }, owner ? 'No responses yet.' : 'Nothing to review yet.') :
     h('div', { class: 'dec-summary' }, ts.map(t => {
