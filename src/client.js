@@ -997,7 +997,7 @@ const groupOf = target => decList().filter(d => d.target === target);
 const rowsOf = target => groupOf(target).filter(d => d.kind !== 'ask');
 const asksOf = target => groupOf(target).filter(d => d.kind === 'ask');
 const lastTalk = d => [...d.log].reverse().find(l => ['question', 'reply', 'changes', 'answer', 'revised', 'posted'].includes(l.kind));
-const ownerNeeds = d => d.kind === 'ask' ? d.status === 'answered' && lastTalk(d)?.kind === 'answer' : d.status === 'changes' || lastTalk(d)?.kind === 'question';
+const ownerNeeds = d => d.kind === 'ask' ? d.status === 'answered' && lastTalk(d)?.kind === 'answer' : (d.status === 'changes' && lastTalk(d)?.kind !== 'reply') || lastTalk(d)?.kind === 'question';
 const lakeNeeds = d => d.status === 'waiting' || lastTalk(d)?.kind === 'reply';
 function decAttention() { const f = S.me?.isOwner ? ownerNeeds : lakeNeeds; return decList().filter(f).length; }
 function targets() { return [...new Set(decList().map(d => d.target).filter(Boolean))]; }
