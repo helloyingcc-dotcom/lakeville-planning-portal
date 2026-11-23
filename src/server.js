@@ -741,7 +741,14 @@ async function presenceGet(env, user) {
   const owners = String(env.OWNER_EMAILS || '').toLowerCase().split(/[\s,;]+/).filter(Boolean);
   const r = await env.DB.prepare('SELECT p.email, p.first_seen, p.last_seen, p.visits, n.name FROM presence p LEFT JOIN people n ON n.email = p.email ORDER BY p.last_seen DESC').all();
   const cutoff = Date.now() - 2 * 60e3;
-  return json({ people: r.results.filter(x => !owners.includes(x.email)).map(x => ({ name: x.name || nameFromEmail(x.email), email: x.email, firstSeen: x.first_seen, lastSeen: x.last_seen, visits: x.visits, online: Date.parse(x.last_seen) > cutoff })) });
+  const mailed = {}; for (const m of (await env.DB.prepare('SELECT lower(to_email) AS e, MAX(sent_at) AS at FROM notify_sent GROUP BY lower(to_email)').all()).results) mailed[m.e] = m.at;
+  const people = r.results.filter(x => !owners.includes(x.email)).map(x => ({ name: x.name || nameFromEmail(x.email), email: x.email, firstSeen: x.first_seen, lastSeen: x.last_seen, visits: x.visits, online: Date.parse(x.last_seen) > cutoff, lastEmailed: mailed[x.email.toLowerCase()] || null }));
+  const seen = new Set(people.map(x => x.email.toLowerCase()));
+  for (const n of (await env.DB.prepare('SELECT email, name FROM people').all()).results) {
+    const e = n.email.toLowerCase(); if (seen.has(e) || owners.includes(e)) continue;
+    people.push({ name: n.name, email: n.email, firstSeen: null, lastSeen: null, visits: 0, online: false, lastEmailed: mailed[e] || null });
+  }
+  return json({ people });
 }
 
 /* ---------------- router ---------------- */

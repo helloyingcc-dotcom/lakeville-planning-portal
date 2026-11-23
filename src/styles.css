@@ -322,3 +322,8 @@ h1,.welcome h2,.tier-head h2{color:var(--lv-navy)}
 .your-turn{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;padding:8px 10px;border-radius:8px;background:#fff6e8;border:1px solid #f3d9a8;font-size:13px;color:#7a4a06}
 .your-turn span{font-weight:600}
 .notify-list{margin:0;padding-left:18px;font-size:13px}.notify-list ul{padding-left:16px;color:#5b6475}
+
+.presence-mail{font-size:.8rem;margin-top:2px}
+.presence-mail.ok{color:#2e7d4f}
+.presence-mail.no{color:#a5621b}
+#decisions #presence{margin:14px 0 4px}

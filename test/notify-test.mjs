@@ -48,4 +48,10 @@ ok(m.length === 3 && /Jimmy/.test(m[2].subject) && m[2].text.includes('/#tab=wor
 await call('ying', '/api/comments', J('POST', { requestId: id(), section: 'workflow', quote: '', body: 'owner note' }));
 await fetch(B + '/__cron');
 ok((await mail()).length === 3, 'Ying’s own activity → no alert');
+// who's been here: last emailed + came back since
+const pr = await call('ying', '/api/presence');
+const pj = pr.j.people.find(x => x.email === 'jessie.smith@example.com');
+ok(pj && pj.lastEmailed && pj.lastSeen, 'presence shows Jessie last seen + last emailed ' + JSON.stringify(pj));
+ok(!pr.j.people.some(x => x.email === 'ying@example.com'), 'owner not listed');
+ok((await call('jessie', '/api/presence')).s === 403, 'Lakeville cannot see presence');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

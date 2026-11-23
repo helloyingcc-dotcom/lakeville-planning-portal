@@ -1227,6 +1227,7 @@ function decisionsPage() {
       h('div', { class: 'dec-progress-top' }, h('strong', null, 'Planning progress'), h('span', null, total ? done + ' of ' + total + ' approved or answered' : 'Nothing yet')),
       h('div', { class: 'dec-bar' }, h('span', { style: 'width:' + (total ? Math.round(done / total * 100) : 0) + '%' })),
       owner ? notifyAllBox() : null,
+      owner ? h('section', { class: 'panel', id: 'presence' }, presenceView()) : null,
       h('p', null, owner ? 'Use “Respond” beside any Lakeville answer to reply with a chart. Lakeville approves each row inside the question.' : 'DBY replies inside each question, under the “DBY’s response” tab. Approve each row or respond to it. Approved rows are what DBY builds.')),
     D.list === null ? h('p', { role: 'status' }, 'Loading…') : !ts.length ? h('div', { class: 'dec-empty' }, owner ? 'No responses yet.' : 'Nothing to review yet.') :
     h('div', { class: 'dec-summary' }, ts.map(t => {
@@ -1244,14 +1245,17 @@ const P = { people: null, last: '' };
 const ago = iso => { const m = Math.round((Date.now() - Date.parse(iso)) / 60e3); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' hr ago' : fmtTime(iso); };
 function presenceView() {
   const ppl = P.people;
+  const since = x => !x.lastEmailed ? null : x.lastSeen && x.lastSeen > x.lastEmailed
+    ? h('span', { class: 'presence-mail ok' }, '✓ Opened the portal after your email (' + fmtTime(x.lastEmailed) + ')')
+    : h('span', { class: 'presence-mail no' }, '✉ Emailed ' + fmtTime(x.lastEmailed) + ' · hasn’t opened the portal since');
   return [h('h2', null, 'Who’s been here'),
-    h('p', { class: 'muted' }, 'Lakeville people who have opened the portal. Green means they have it open right now. Someone you invited who isn’t listed hasn’t signed in yet.'),
+    h('p', { class: 'muted' }, 'When each Lakeville person last opened the portal, and whether they’ve come back since your last email. Green means they have it open right now.'),
     ppl === null ? h('p', { class: 'muted' }, 'Loading…') : !ppl.length ? h('p', null, 'No one from Lakeville has signed in yet.') :
     h('ul', { class: 'presence-list' }, ppl.map(x => h('li', null,
       h('span', { class: 'presence-dot' + (x.online ? ' on' : ''), title: x.online ? 'Online now' : 'Offline' }),
-      h('span', { class: 'presence-name' }, h('strong', null, x.name), h('small', null, x.email)),
-      h('span', { class: 'presence-when' }, x.online ? h('strong', { class: 'presence-online' }, 'Online now') : 'Last here ' + ago(x.lastSeen),
-        h('small', null, 'First signed in ' + fmtTime(x.firstSeen) + ' · ' + x.visits + (x.visits === 1 ? ' visit' : ' visits'))))))];
+      h('span', { class: 'presence-name' }, h('strong', null, x.name), h('small', null, x.email), since(x)),
+      h('span', { class: 'presence-when' }, x.online ? h('strong', { class: 'presence-online' }, 'Online now') : x.lastSeen ? 'Last here ' + ago(x.lastSeen) : 'Never signed in',
+        x.firstSeen ? h('small', null, 'First signed in ' + fmtTime(x.firstSeen) + ' · ' + x.visits + (x.visits === 1 ? ' visit' : ' visits')) : null))))];
 }
 const AIU = { data: null };
 const usd = n => '$' + (n < 1 ? n.toFixed(3) : n.toFixed(2));
